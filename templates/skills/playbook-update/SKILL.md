@@ -24,7 +24,7 @@ nothing to sync, as its own one-file `chore` PR so the next run gets the fast pa
 
 ## 2. Fetch the playbook — with history
 
-    git clone https://github.com/anik1ng/agent-playbook <tmpdir>
+    git clone https://github.com/ref/agent-playbook <tmpdir>
 
 NOT `--depth 1` when a lock exists: the delta below needs `git log`, and the repo is
 small. Always a fresh clone, never a stale copy.

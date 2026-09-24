@@ -22,7 +22,7 @@ three instruction documents any capable agent can follow.
 
 In the repository you want to adopt it in, tell your agent:
 
-> Read ADOPT.md from github.com/anik1ng/agent-playbook and install this workflow into the
+> Read ADOPT.md from github.com/ref/agent-playbook and install this workflow into the
 > current repository.
 
 - **`ADOPT.md`** (once, the agent's part): detects the toolchain, renders the templates,
@@ -34,7 +34,7 @@ In the repository you want to adopt it in, tell your agent:
   instruction is **`/playbook-update`** — the skill reads `.agents/playbook.lock`,
   fetches the playbook, and answers "up to date" in seconds or reports exactly what
   moved upstream before syncing. Repos adopted before the skill existed still use the
-  sentence: *"Read UPDATE.md from github.com/anik1ng/agent-playbook and sync this
+  sentence: *"Read UPDATE.md from github.com/ref/agent-playbook and sync this
   repository."* Either way it syncs the files that never diverge, keeps the ones that
   do, and shows every difference before writing.
 

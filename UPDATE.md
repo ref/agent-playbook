@@ -1,7 +1,7 @@
 # UPDATE.md — how an agent re-syncs an adopted repository
 
 You are an agent, syncing a repository that already carries this workflow against the
-current playbook. The human says: *"Read UPDATE.md from github.com/anik1ng/agent-playbook
+current playbook. The human says: *"Read UPDATE.md from github.com/ref/agent-playbook
 and sync this repository."* — or, in a repo that already carries the `playbook-update`
 skill, just `/playbook-update`: that skill is the executable form of this page plus the
 lock mechanics below; this page stays canonical, and on drift it wins and the skill file
@@ -10,7 +10,7 @@ is the bug. If the repo carries none of the files below, it is not adopted — t
 
 Fetch fresh, never a stale copy or a partial download of single files:
 
-    git clone https://github.com/anik1ng/agent-playbook <tmpdir>
+    git clone https://github.com/ref/agent-playbook <tmpdir>
 
 (`--depth 1` only when the repo has no lock — see below; the delta needs history, and
 the repo is small.)

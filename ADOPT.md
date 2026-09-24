@@ -4,7 +4,7 @@ You are an agent, installing the agent-playbook workflow into the repository you
 currently in. Fetch the templates with a shallow clone into a temporary directory (delete
 it when done):
 
-    git clone --depth 1 https://github.com/anik1ng/agent-playbook <tmpdir>
+    git clone --depth 1 https://github.com/ref/agent-playbook <tmpdir>
 
 If the current directory is not a git repository, stop and say so.
 
