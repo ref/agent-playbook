@@ -133,9 +133,10 @@ in this page — file it.
   but never deletes a branch itself.
 - **The reviewer's worktree** — `../<repo>-wt-review`, one per repository, created on the
   first auto-review and kept (that is what makes the folder-trust prompt a one-time
-  question and skips a reinstall per review). It holds a detached checkout plus
-  `node_modules`. Nothing retires it on a schedule: remove it when you want the disk back
-  or a review is stuck on a bad tree — `{{PKG_MANAGER}} run worktree:teardown --
+  question). It holds a detached checkout plus `node_modules`; the full provisioning runs
+  once, and every later review re-runs only the frozen install, so a PR that adds a
+  dependency is reviewed with it installed. Nothing retires it on a schedule: remove it
+  when you want the disk back or a review is stuck on a bad tree — `{{PKG_MANAGER}} run worktree:teardown --
   --disposable ../<repo>-wt-review`, or without this module
   `git worktree remove --force ../<repo>-wt-review` then `git worktree prune`. The next
   `/ship` recreates it. Directories named
