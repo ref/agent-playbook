@@ -69,6 +69,12 @@ Rules of engagement:
     `awk` or `perl`, even read-only: sed's flags reorder freely, so no allowlist
     entry can cover the read form without also covering `sed -n -i …`, a silent
     write to any file on disk. `sed` stays unseeded and every use stalls.
+  - Search the tree with `rg` (or `grep`) — never `git grep`: its `-O` /
+    `--open-files-in-pager` flag runs an arbitrary command on every match, so the
+    prefix is an arbitrary-code runner no allowlist entry can cover, and the command
+    stalls [seen live: a symbol lookup, one prompt]. Pipe a search only into the
+    seeded filters (`head`, `tail`, `wc`): `sort`, `uniq`, `cut` and `tr` are
+    unseeded, and one unseeded part stalls the whole pipe.
   - Run tests through the repo's own seeded scripts — the gate commands `AGENTS.md`
     names, its test runner, and the targeted single-file form where the list carries
     one (`npx vitest run <file>` or `pnpm vitest run <file>` in a vitest repo). Bare
@@ -84,7 +90,15 @@ Rules of engagement:
     `rm -rf tmp` is; any other name or path stalls, because a bare `sh` entry would
     run any script anywhere on disk.
   - Never start services or containers (`docker run`, a database, a dev server), and
-    never hand-assemble an environment a suite reports missing. A suite that SKIPS
+    never QUERY one through a repo script either — `db:query`, `db:push`, `db:seed`,
+    a migration runner, anything that takes SQL or talks to a live service: a
+    command rule cannot tell a SELECT from a DROP, so the shape is unseedable and
+    every call stalls [seen live: two recursive-CTE probes against a live database,
+    one prompt each]. A data-shape question ("does this query terminate on cyclic
+    rows?") becomes a probe test run through the seeded runner, against the suite's
+    own test database where the repo has one (`test:db`), or stays a question in
+    the verdict where it does not. Never hand-assemble an environment a suite
+    reports missing, either. A suite that SKIPS
     locally without its infrastructure (a missing `TEST_DATABASE_URL`) skips by
     design: CI owns it — read that check's result on the PR instead of rebuilding
     the environment locally. That is the ONE substitution CI is allowed to make. A

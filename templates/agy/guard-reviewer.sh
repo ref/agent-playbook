@@ -179,6 +179,22 @@ if hit "${A}docker[[:space:]]"; then
   deny "Off-protocol: never start services or containers. CI owns integration infrastructure - read its check on the PR instead of rebuilding the environment (review SKILL.md, command discipline)."
 fi
 
+# Live services through a repo script: `db:query`, `db:push`, `db:seed`, a
+# migration runner. A command rule cannot tell a SELECT from a DROP, so the
+# shape is unseedable, and each call prompted the human (live: two
+# recursive-CTE probes against a live database, one prompt each). The prefix
+# is `db:`, so the test runner's own `test:db` stays an ordinary seeded run.
+if hit "${A}(pnpm|npm|yarn|bun)[[:space:]]+(run[[:space:]]+)?db:"; then
+  deny "Off-protocol: never query or mutate a live service through a repo script (db:query, db:push, db:seed, migrations) - a command rule cannot tell a SELECT from a DROP. Turn the question into a probe test run through the seeded test runner (test:db where the repo has one), or leave it as a question in the verdict (review SKILL.md, command discipline)."
+fi
+
+# git grep: `-O` / `--open-files-in-pager` runs an arbitrary command on every
+# match, so the prefix is an arbitrary-code runner no allowlist entry can
+# cover; rg and grep are the seeded search (live: a symbol lookup, one prompt).
+if hit "${A}git[[:space:]]+grep([[:space:]]|$|[\"'])"; then
+  deny "Off-protocol: git grep is unseedable (-O runs an arbitrary command on the matches). Search the tree with rg or grep instead (review SKILL.md, command discipline)."
+fi
+
 # Inline eval: arbitrary code outside the repo's own test layout.
 if hit "${A}node[[:space:]]+(-e|--eval)([[:space:]]|['\"])"; then
   deny "Off-protocol: no inline eval. Write a throwaway probe test with the file-editing tool and run it through the repo's seeded test runner (review SKILL.md, command discipline)."

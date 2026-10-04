@@ -69,8 +69,9 @@ Copy both files as they are — no placeholders, nothing repo-specific:
 Two tiers, one mechanic. Tier 1 denies `git push`, `gh pr merge`, `gh pr close` and
 the `gh api` routes behind them — the reviewer is report-only. Tier 2 denies the
 command shapes the review skill forbids (stream editors, `export` prefixes, `$(…)`
-substitution, `xargs`, docker, inline eval, bare `npx`, any file written through the
-shell — heredoc, redirect, tee — `mv`/`cp`/`ln`, `rm` in any form but
+substitution, `xargs`, docker, a repo script against a live service (`db:query`,
+`db:push`, `db:seed`, …), `git grep`, inline eval, bare `npx`, any file written through
+the shell — heredoc, redirect, tee — `mv`/`cp`/`ln`, `rm` in any form but
 `rm -rf <one directory>`, package installs, and `gh api`), each with a one-line reason
 naming the sanctioned alternative — because an "ask" for an
 off-protocol command reaches a human who cannot judge it without reading the code
@@ -207,6 +208,13 @@ every later seeded command means — a prepended `PATH` turns a seeded `git stat
 any binary on disk, so the entry would silently widen every other rule in the list);
 `docker` (`run` starts a service and `-v` mounts any path on the machine — a reviewer
 has no business starting infrastructure, and the review skill now says so outright);
+any repo script that talks to a live service — `db:query`, `db:push`, `db:seed`, a
+migration runner (a command rule cannot tell a SELECT from a DROP; the suite's own
+`test:db` is the seeded way to reach a database, and a reviewer that hand-ran two
+recursive-CTE probes against a live one cost the human two prompts [seen live]);
+`git grep` (`-O` / `--open-files-in-pager` runs an arbitrary command on every match —
+`rg` and `grep` are the seeded search, and the skill now names them [seen live: a
+symbol lookup, one prompt]);
 and no stream editor (`sed`, `perl -i`, `awk`) even for READS:
 command rules carry no path scope and sed's flags reorder freely, so even the narrow
 `sed -n` entry still covers `sed -n -i s/…/…/ <file>` — a silent write to ANY file on
