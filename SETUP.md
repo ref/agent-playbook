@@ -82,6 +82,21 @@ as the job names stand in your repo:
   its own no-op twin in `ci-docs.yml` for the same reason `checks` does — and
   `cargo audit (RustSec advisories)`, which like gitleaks runs on every PR.
 
+**Feature branches (`feature/*`) stay OUTSIDE this ruleset, on purpose.** They are the
+long-lived branches a multi-PR feature grows on (`AGENTS.md` "Feature branches"); they
+deploy nothing, and their gate is the trunk's: the one PR that takes a feature to the
+default branch runs every required check above and gets its own review. A ruleset on
+`feature/**` would refuse the two pushes the model depends on — an agent merging the
+trunk INTO the feature branch (the only way to keep it current without rewriting the
+commits its open sub-PRs hang off) and GitHub's own "Update branch" button on the feature
+PR — and a sync by PR would have to be merged as a merge commit, which the squash-only
+settings above rule out. The sub-PRs into a feature branch still run every workflow and
+still get the reviewer's verdict; what they lack is only the server-side lock, and the
+merge ritual (green CI on the latest commit, the verdict comment) covers that by hand, as
+it does on a plan without rulesets. `feature-merge.yml` (the fifth workflow) is not a
+status check and is never required: it runs after a merge, when there is nothing left
+to block.
+
 **Why requiring `checks` is safe here.** `ci.yml` skips doc-only PRs by design, and a
 workflow skipped by its path filter reports nothing — a required check that never reports
 would block those PRs forever. That is what `ci-docs.yml` exists for: the no-op twin runs

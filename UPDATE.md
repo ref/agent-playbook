@@ -77,7 +77,7 @@ adopted repo — that is a playbook bug, not a repo's configuration task.
 
 **Class A — kept identical to the playbook**: everything else adoption installed — the
 five skills (`do`, `ship`, `review`, `playbook-update`, `playbook-compact`),
-`pr-hygiene.yml`, `security.yml`, `ci-docs.yml`, the PR template,
+`pr-hygiene.yml`, `security.yml`, `ci-docs.yml`, `feature-merge.yml`, the PR template,
 `dependabot.yml`, `.githooks/pre-push`, `.claude/settings.json`, `.agents/auto-review.sh`,
 the worktree module (`scripts/*.mts` + their tests), the schema-lock module
 (`scripts/schema-lock.mts`, `scripts/check-schema-lock.mts`, `scripts/schema-lock.test.ts`

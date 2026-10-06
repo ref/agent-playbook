@@ -34,7 +34,7 @@ blocks a direct push.
 | `AGENTS.md`                  | `AGENTS.md`                                          |
 | `RUNBOOK.md`                 | `docs/RUNBOOK.md`                                    |
 | `pull_request_template.md`   | `.github/pull_request_template.md`                   |
-| `workflows/*.yml` (4 files)  | `.github/workflows/`                                 |
+| `workflows/*.yml` (5 files)  | `.github/workflows/`                                 |
 | `dependabot.yml`             | `.github/dependabot.yml`                             |
 | `githooks/pre-push`          | `.githooks/pre-push` (chmod 755)                     |
 | `settings.json`              | `.claude/settings.json` (merge into existing)        |
