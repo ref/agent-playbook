@@ -44,7 +44,24 @@ If the issue leaves a decision explicitly open ("decide whether X"), that is a q
 the human, not a coin flip — ask it before writing the code that depends on the answer.
 
 Derive the branch name you would use from the issue's conventional-commit title prefix:
-`chore(agents): …` → `chore/<kebab-short-name>`. Step 4 may not need it.
+`chore(agents): …` → `chore/<kebab-short-name>`. Step 4 may not need it. Never
+`feature/<…>` — that prefix is reserved for feature branches (AGENTS.md "Feature
+branches").
+
+**Find the BASE this issue's PR targets.** Detect the default branch rather than
+assuming its name:
+
+    DEFAULT=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
+
+If the issue carries `Refs #<umbrella>`, read that umbrella's body too
+(`gh issue view <umbrella> --json body`) and look for a line `Branch: feature/<topic>`.
+Found → `BASE=feature/<topic>`: the task branch is cut from it and the PR goes into it,
+not the trunk — unless the issue itself says it ships to the trunk (a schema phase), in
+which case `BASE=$DEFAULT`. No such line, or no umbrella → `BASE=$DEFAULT`.
+
+Say which base you resolved in the kickoff brief (step 3) — a sub-task shipped to the
+wrong base deploys half a feature, which is the failure feature branches exist to
+prevent.
 
 ## 3. Stage gate — what does this issue need next?
 
@@ -113,13 +130,30 @@ gate looks exactly like one that ran it and chose to implement.
      same session (`superpowers:writing-plans` where installed) —
      `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`: bite-sized tasks grouped into
      phases, each phase sized to ONE PR, written for an engineer with zero context.
+   - **Ask where the phases land** — one of the interview's questions, never assumed: on
+     a FEATURE BRANCH (the default: the feature reaches users whole, after the human has
+     tried it) or one by one on the trunk (only when every phase is usable on its own).
+     The plan also puts every schema-surface change into its own trunk-bound phase,
+     additive and backward-compatible, ordered before the phase that uses it (AGENTS.md
+     "Specs and plans") — a feature branch never carries a migration.
    - **Decompose into sub-issues** — one per phase (`gh issue create`), each linking the
      spec and carrying `Refs #<issue>`. Edit the seed issue into the umbrella: a task-list
-     checklist of the sub-issues in its body, plus a comment linking the spec and plan.
-     The docs are the snapshot of the decisions; the umbrella issue is the live state.
+     checklist of the sub-issues in its body, one line per sub-issue in exactly the form
+     `- [ ] #<n> — <title>` (the merge workflow ticks lines by that number), plus a
+     comment linking the spec and plan. With a feature branch: create it from the trunk
+     and record it in the umbrella body on its own line —
+
+         git fetch origin --prune
+         git push origin origin/$DEFAULT:refs/heads/feature/<topic>
+
+     then `Branch: feature/<topic>` in the body. That line is what every later
+     `/do <sub-issue>` reads for its base. A schema phase's sub-issue says in its body
+     that it ships to the trunk. The docs are the snapshot of the decisions; the
+     umbrella issue is the live state.
    - **Ship the artifacts** — the spec + plan (and nothing else) as one PR via step 7,
-     with `Refs #<issue>` as the issue link. The spec riding a PR is deliberate: it gets
-     the same independent review as code, and spec errors are the expensive ones.
+     into the TRUNK (docs are not feature work) with `Refs #<issue>` as the issue link.
+     The spec riding a PR is deliberate: it gets the same independent review as code,
+     and spec errors are the expensive ones.
    - **Stop.** Tell the human: the spec and plan are up for review, and implementation
      starts in a FRESH session with `/do <first sub-issue>`. Do not implement here — the
      docs are the compression of this session's context, and a fresh executor reading
@@ -129,41 +163,70 @@ gate looks exactly like one that ran it and chose to implement.
 
 ## 4. Get on the right branch — adopt before you create
 
-Detect the default branch rather than assuming its name:
+`BASE` is what step 2 resolved: the default branch, or the umbrella's feature branch.
+Everything below is relative to `origin/$BASE`, never to the trunk by habit.
 
-    DEFAULT=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
+**Feature base first — make sure it exists and is current.** Only when `BASE` is a
+feature branch:
+
+    git fetch origin --prune
+    git rev-parse --verify --quiet origin/$BASE
+    git log --oneline origin/$BASE..origin/$DEFAULT
+
+- `origin/$BASE` missing → the umbrella names a branch nobody created (an umbrella
+  written by hand). Create it from the trunk — `git push origin
+  origin/$DEFAULT:refs/heads/$BASE` — and carry on.
+- The log is non-empty → the feature branch is BEHIND the trunk. Bring it up to date by
+  MERGE, never rebase (AGENTS.md "Feature branches"), in this working copy, before
+  cutting anything:
+
+      git switch $BASE
+      git merge origin/$DEFAULT
+      <the local gate, as AGENTS.md "Getting to master" defines it>
+      git push origin $BASE
+
+  `git switch` refusing because another worktree holds the branch means the human is
+  likely trying the feature there — **STOP and ask** rather than work around it. A
+  conflict is resolved honestly, per file (a lockfile never by hand). The merge commit
+  is the only commit you ever put on a feature branch directly. Note the branch you were
+  on before the switch: a task branch `task:start` cut for you from the OLD base has no
+  commits of its own, so `git switch -C <that-branch> origin/$BASE` puts you back on it,
+  on the fresh base, and the cases below then read it as case 2.
 
 Someone may have already made a branch for this task — a worktree tool, a task runner, or
 the human by hand. **Never provision what already exists.** First matching case wins:
 
-    git fetch origin --prune
     git status -sb
-    git log --oneline origin/$DEFAULT..HEAD
+    git log --oneline origin/$BASE..HEAD
 
-1. **On the default branch, clean tree** → `git switch -C <type>/<kebab> origin/$DEFAULT`.
+1. **On the default branch or on `$BASE` itself, clean tree** →
+   `git switch -C <type>/<kebab> origin/$BASE`.
 
-   **On the default branch, dirty tree** → those uncommitted changes are somebody's work,
+   **On either of those, dirty tree** → those uncommitted changes are somebody's work,
    and `switch -C` would silently carry them onto YOUR branch. One question to the human
    first: "are these changes yours, for this task?" Yes → switch and carry them (the
    "started hacking on the default branch, now formalize it" case). No, or no answer to
    give — another agent may be mid-task in this copy — → do not work here: where the
    worktree module is installed (`task:start` in package.json), run
-   `<pkg-manager> run task:start -- <short-name> <type>/<kebab> "/do <issue>"` yourself —
-   the trailing argument is the spawned agent's FIRST TURN, delivered on its own command
-   line, so the task starts without anyone re-typing it. Never omit it: a workspace
-   opened without its task is an agent waiting for input nobody is going to type. Where
-   the module is not installed, stop and say this working copy is occupied. Two agents
-   in one working copy commit each other's files — that is the failure this question
-   exists to prevent.
-2. **On a non-default branch with no commits beyond `origin/$DEFAULT`** → that is a fresh
-   task branch someone else already cut. **Adopt it as-is, whatever it is called.** Branch
-   names carry no meaning downstream — the PR title becomes the squash title.
-3. **On a non-default branch WITH commits beyond `origin/$DEFAULT`** → ask that branch about
+   `<pkg-manager> run task:start -- --base $BASE <short-name> <type>/<kebab> "/do <issue>"`
+   yourself (drop `--base` when `BASE` is the trunk) — the trailing argument is the
+   spawned agent's FIRST TURN, delivered on its own command line, so the task starts
+   without anyone re-typing it. Never omit it: a workspace opened without its task is an
+   agent waiting for input nobody is going to type. Where the module is not installed,
+   stop and say this working copy is occupied. Two agents in one working copy commit
+   each other's files — that is the failure this question exists to prevent.
+2. **On another branch with no commits beyond `origin/$BASE`** → that is a fresh task
+   branch someone else already cut (a `task:start` worktree, usually). **Adopt it as-is,
+   whatever it is called.** Branch names carry no meaning downstream — the PR title
+   becomes the squash title. If the feature-base merge above moved `origin/$BASE` after
+   this branch was cut, re-point it: `git switch -C <its-name> origin/$BASE` — it has no
+   commits to lose.
+3. **On another branch WITH commits beyond `origin/$BASE`** → ask that branch about
    its PR: `gh pr view --json state,mergedAt` (no argument = current branch).
    - **merged or closed** → leftover history after a squash-merge (a squashed branch's
-     commits are never ancestors of the default branch). Routine, not an anomaly: silently
-     `git switch -C <type>/<kebab> origin/$DEFAULT` and carry on. No question to the human.
-     Same rule as AGENTS.md "never reuse a branch after merge".
+     commits are never ancestors of the branch it merged into). Routine, not an anomaly:
+     silently `git switch -C <type>/<kebab> origin/$BASE` and carry on. No question to
+     the human. Same rule as AGENTS.md "never reuse a branch after merge".
    - **open** → in-flight work belonging to someone else. **STOP and ask the human.**
    - **no PR at all** → unshipped local work of unknown provenance. **STOP and ask the
      human.**
@@ -207,15 +270,21 @@ plan's tasks for THIS issue's phase in order — and AGENTS.md for how:
 ## 7. Ship
 
 Follow the `ship` skill (`/ship`, or read `.agents/skills/ship/SKILL.md` directly): rebase
-onto the default branch, full local gate, push, PR.
+onto `origin/$BASE`, full local gate, push, PR against `$BASE`.
 
 Two things `ship` deliberately makes you write yourself, with one default from this issue:
 
-- **Issue link:** `Closes #<issue>` — unless this issue is an umbrella / multi-part one
-  that must stay open across several PRs (a spec+plan PR from step 3 always is), in which
-  case `Refs #<issue>`.
+- **Issue link:** `Closes #<issue>` — a sub-issue included, whatever its base: into a
+  feature branch the committed `feature-merge.yml` workflow does the closing GitHub only
+  does on the trunk, and ticks the umbrella's line. `Refs #<issue>` only for an umbrella
+  / multi-part issue that must stay open across several PRs (a spec+plan PR from step 3
+  always is).
 - **`## Docs`:** written fresh, never boilerplate. Answer the real question — which docs does
   this diff make stale, or why genuinely none.
 
-After a sub-issue's PR lands, tick its checkbox in the umbrella issue — the umbrella is
-the live state of the plan, and an unticked box on merged work misleads the next session.
+The umbrella's checklist is the live state of the plan, and the workflow keeps it: a
+merged sub-PR whose line stayed unticked means its body lacked `Closes #<n>`, or the
+umbrella line is not in the `- [ ] #<n>` form — fix the line, never the habit of
+checking. When the last line is ticked, the feature is ready for the human's hand check
+and then `/ship` on the feature branch (AGENTS.md "Feature branches") — say so in the
+PR body of the last sub-PR.

@@ -115,6 +115,32 @@ Rules of engagement:
   checklist's process checks. Its findings are candidates, not verdicts: verify each by
   executing (probe/mutation, item 5) before it may appear in yours.
 
+**A FEATURE PR gets an INTEGRATION review, not a second line-by-line one.** Head
+`feature/<topic>`, base the default branch (`gh pr view <pr> --json headRefName,baseRefName`).
+Its pieces were each reviewed under this protocol and merged into the feature branch by
+the human (AGENTS.md "Feature branches"); the question now is whether the sum is what
+those sub-PRs promised, and whether it survives the trunk. Items 3, 4, 7 and 8 were
+answered per piece and are NOT repeated over the whole diff; in their place:
+
+- **Provenance.** `gh pr list --state merged --base feature/<topic> --json number,title`
+  against the list the PR body carries, and `git log --first-parent origin/<default>..HEAD`:
+  every first-parent commit is one of those squashes or a merge from the trunk.
+  Anything else is a direct push nobody reviewed — review THAT hunk in full, items 3–8
+  included. Every listed sub-PR carries an approve verdict on its final head
+  (`gh pr view <n> --json comments`); one merged without a verdict is a blocker — its
+  review was skipped, not deferred.
+- **Seams.** The files more than one sub-PR touched, and the places a later sub-PR
+  leaned on an earlier one's interface: read those hunks in full and probe them (item 5
+  applies there with full force — a seam is where "each piece was fine" goes wrong).
+- **The umbrella.** Every checklist line ticked, the body says `Closes #<umbrella>`, and
+  "How to test by hand" covers the whole feature end to end — it is what the human
+  tries on the feature branch before merging.
+- Items 1, 2, 5 (the gate on the MERGED tree), 6 (freshness against the trunk — a
+  feature branch that is behind is exactly the hazard that item describes), 9 and 10
+  apply unchanged, over the whole diff.
+
+Say in the verdict that this was an integration review and name the sub-PRs it rested on.
+
 Checklist, in priority order:
 
 1. **Test integrity (most important).** Were existing tests deleted, `.skip`ped,
@@ -195,7 +221,9 @@ Checklist, in priority order:
      hand-listed set of files — a file list can never be pre-approved.
    - Run the gate the author claims (AGENTS.md "Getting to master" defines it) plus the
      affected suites. A red gate is itself a blocker.
-6. **Freshness of the base.** Check how far the branch is behind the default branch —
+6. **Freshness of the base.** Check how far the branch is behind the PR's BASE — the
+   default branch, or the feature branch a sub-PR targets (`gh pr view <pr> --json
+   baseRefName`); a sub-PR is measured against its feature branch, never the trunk —
    but staleness ALONE is not a blocker. With parallel PRs the base moves under every
    open review the moment one merges; an unconditional "rebase first" verdict turns each
    merge into a full re-review of every other PR, and the protection it duplicates
@@ -203,10 +231,11 @@ Checklist, in priority order:
    human's ritual force an Update branch and green CI on the merged tree). Decide by
    what the staleness actually is:
    - Not behind → done.
-   - Behind with a merge CONFLICT → blocker: the author rebases and resolves.
-   - Behind, no conflict, but the PR's files OVERLAP what the default branch changed
-     since the merge-base (two seeded commands — `git merge-base HEAD origin/<default>`,
-     then `git diff --name-only <that-sha> origin/<default>` with the literal sha, never
+   - Behind with a merge CONFLICT → blocker: the author rebases and resolves (a feature
+     branch MERGES the trunk in instead — AGENTS.md "Feature branches").
+   - Behind, no conflict, but the PR's files OVERLAP what the base changed
+     since the merge-base (two seeded commands — `git merge-base HEAD origin/<base>`,
+     then `git diff --name-only <that-sha> origin/<base>` with the literal sha, never
      a `$(…)` substitution — against the PR's file list) → inspect the interaction. This is
      the real hazard the check exists for: a stale base can silently reverse a recent
      merge in the squash — a branch cut before a cleanup PR re-adds what that PR
