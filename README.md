@@ -56,6 +56,9 @@ docs/RUNBOOK.md                    the human's page: what YOU run and remember (
 .github/workflows/pr-hygiene.yml   PR body links an issue, title is conventional, Docs filled
 .github/workflows/security.yml     gitleaks secret scan on every PR — plus cargo audit
                                    where a Cargo.toml exists
+.github/workflows/feature-merge.yml after a merge into a feature branch: closes the
+                                   sub-issues and ticks the umbrella (GitHub only does
+                                   that on a trunk merge)
 .github/dependabot.yml             grouped weekly bumps, supply-chain cooldowns (npm,
                                    actions — and cargo where a Cargo.toml exists)
 .github/pull_request_template.md
@@ -76,6 +79,12 @@ design gets the same review as code), files the plan's phases as sub-issues, and
 implementation then runs in fresh sessions, one `/do` per sub-issue. `/ship` takes a
 finished branch to a PR and launches the auto-review; `/review <n>` is the manual form of
 the same reviewer pass.
+
+**A feature too big for one PR reaches the trunk whole.** Its umbrella issue names a
+`feature/<topic>` branch; each sub-issue's PR lands there (same CI, same review, same
+human merge, nothing deployed), the human tries the finished branch, and `/ship` on it
+opens the one PR that takes the whole feature to the trunk. Small fixes keep going
+straight to the trunk in between, and a feature can sit paused for a month at no cost.
 
 **The review starts itself.** With a reviewer CLI chosen at adoption (a different model
 family than the tool writing your PRs), `/ship` opens a visible cmux workspace
