@@ -43,11 +43,14 @@ import {
 
 const USAGE = [
   "Usage:",
-  "  task:start -- <name> <branch> [prompt...]",
+  "  task:start -- [--base <branch>] <name> <branch> [prompt...]",
   "",
+  "  --base    the branch to cut from instead of the default branch — a",
+  "            feature branch (AGENTS.md → “Feature branches”), e.g.",
+  "            --base feature/i18n. It must already exist on origin.",
   "  <name>    short handle: the worktree becomes ../<repo>-wt-<name>",
   "            and the workspace, where a workspace manager exists, is called <name>",
-  "  <branch>  the branch to cut from the default branch, e.g. fix/orphan-links",
+  "  <branch>  the branch to cut from the base, e.g. fix/orphan-links",
   "  [prompt]  the agent's FIRST TURN, typed for it at launch — e.g. \"/do 46\".",
   "            Pass it whenever the task is already known: without it the",
   "            workspace opens an agent waiting for input nobody is going to",
@@ -79,9 +82,22 @@ function cmux(args: string[]): string | null {
 
 // dropLeadingSeparators, not raw argv: pnpm forwards the `--` separator into
 // the script, where it would land as the task NAME.
-const [name, branch, ...promptWords] = dropLeadingSeparators(
-  process.argv.slice(2),
-);
+const args = dropLeadingSeparators(process.argv.slice(2));
+
+// `--base <branch>` / `--base=<branch>` is recognised only AHEAD of the
+// positionals: everything after the branch is the prompt, free text an agent
+// typed, and a `--base` inside it must stay the agent's words.
+let baseOverride: string | null = null;
+while (args[0] === "--base" || args[0]?.startsWith("--base=")) {
+  const flag = args.shift() as string;
+  const value = flag === "--base" ? args.shift() : flag.slice("--base=".length);
+  if (value === undefined || value === "") {
+    fail(`--base needs a branch name.\n\n${USAGE}`);
+  }
+  baseOverride = value;
+}
+
+const [name, branch, ...promptWords] = args;
 if (name === undefined || branch === undefined) {
   fail(`a name and a branch are required.\n\n${USAGE}`);
 }
@@ -157,26 +173,31 @@ try {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Worktree, cut from the LATEST default branch
+// 2. Worktree, cut from the LATEST base — the default branch, or the feature
+//    branch `--base` names
 // ---------------------------------------------------------------------------
 
 // origin/HEAD is set on clone but can be missing in old or hand-built
 // clones; `set-head --auto` asks the remote once and records the answer.
 let base: string;
-try {
-  base = git(["rev-parse", "--abbrev-ref", "origin/HEAD"]);
-} catch {
+if (baseOverride !== null) {
+  base = `origin/${baseOverride.replace(/^origin\//, "")}`;
+} else {
   try {
-    execFileSync("git", ["remote", "set-head", "origin", "--auto"], {
-      stdio: "ignore",
-    });
     base = git(["rev-parse", "--abbrev-ref", "origin/HEAD"]);
   } catch {
-    fail(
-      "could not determine the default branch: origin/HEAD is unset and\n" +
-        "  `git remote set-head origin --auto` failed (offline?). Run that\n" +
-        "  command yourself once, then retry.",
-    );
+    try {
+      execFileSync("git", ["remote", "set-head", "origin", "--auto"], {
+        stdio: "ignore",
+      });
+      base = git(["rev-parse", "--abbrev-ref", "origin/HEAD"]);
+    } catch {
+      fail(
+        "could not determine the default branch: origin/HEAD is unset and\n" +
+          "  `git remote set-head origin --auto` failed (offline?). Run that\n" +
+          "  command yourself once, then retry.",
+      );
+    }
   }
 }
 
@@ -185,6 +206,24 @@ try {
   execFileSync("git", ["fetch", "origin", "--prune"], { stdio: "inherit" });
 } catch {
   fail("git fetch failed — its output is above.");
+}
+
+// After the fetch, so a feature branch created a minute ago is seen. A base
+// that does not exist on origin is a hard stop, not a fallback to the default
+// branch: a sub-task cut from the trunk ships half a feature to production,
+// which is the failure feature branches exist to prevent.
+if (baseOverride !== null) {
+  try {
+    git(["rev-parse", "--verify", "--quiet", base]);
+  } catch {
+    fail(
+      `${base} does not exist on origin.\n` +
+        "  A feature branch is created by the spec+plan session (or by `/do` on\n" +
+        "  its first sub-task) from the latest default branch:\n\n" +
+        `    git push origin origin/HEAD:refs/heads/${baseOverride}\n\n` +
+        "  then retry. Never fall back to the default branch for a sub-task.",
+    );
+  }
 }
 
 console.log(`• git worktree add ${target} -b ${branch} ${base}\n`);
