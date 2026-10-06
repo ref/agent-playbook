@@ -60,6 +60,45 @@ in this page — file it.
 
       {{PKG_MANAGER}} run format:check && {{PKG_MANAGER}} run type-check && {{PKG_MANAGER}} run lint && {{PKG_MANAGER}} run knip && {{TEST_CMD}}{{RUST_GATE}}
 
+## Features that take several PRs (feature branches)
+
+<!-- Customize: nothing — the rules are in AGENTS.md "Feature branches"; this is what YOU do. -->
+
+A feature whose pieces are useless until the last one lands does not reach users piece
+by piece: it grows on `feature/<topic>` and reaches the trunk — and so the deploy — in
+ONE PR, after you have tried it. Small issues with no umbrella go straight to the trunk
+as always. Your part, start to finish:
+
+- **Starting one**: file the issue, `/do <n>` as usual. The spec+plan session asks you
+  whether the phases land on a feature branch (the default) or one by one; on a feature
+  branch it creates `feature/<topic>` and writes `Branch: feature/<topic>` into the
+  umbrella issue. Every `/do <sub-issue>` reads that line and opens its PR into the
+  feature branch — you merge those PRs exactly as you merge any other (squash, green CI
+  on the latest commit, the verdict comment). Nothing deploys. The sub-issue closes and
+  its line in the umbrella ticks itself on merge (`feature-merge.yml`).
+- **Working on something else meanwhile**: nothing to do. A fix or a small feature is a
+  normal issue, a normal PR into the trunk, a normal deploy; the feature branch does not
+  see it until an agent merges the trunk into it, which happens on its own at the next
+  sub-task and before the feature PR.
+- **Pausing**: stop starting its sub-issues. The branch waits. Resuming is the next
+  `/do <sub-issue>`; the agent merges the trunk in first, and the longer the pause the
+  more that merge may ask you about.
+- **Trying it**: when the umbrella's checklist is fully ticked, in your own checkout —
+  `git switch feature/<topic>`, the usual migrate/dev commands, click through. A bug is
+  a new issue carrying `Refs #<umbrella>`; `/do` sends its PR into the feature branch.
+  Switch back to the trunk when done — an agent that finds the feature branch checked
+  out here will stop and ask instead of pushing to it.
+- **Releasing it**: in that checkout, on the feature branch, tell an agent `/ship`. It
+  merges the trunk in, runs the gate, opens `feature/<topic>` → trunk with
+  `Closes #<umbrella>`, and the reviewer runs an integration review (the pieces were
+  reviewed on the way in). Merge it like any PR — squash — and the deploy carries the
+  whole feature at once. GitHub deletes the branch; a second wave of the same topic is
+  a new issue and a new branch.
+- **Schema changes never ride the feature branch**: the plan puts each one in its own
+  small PR into the trunk, additive only, so your dev database stays valid for the
+  trunk and the feature at once. `/ship` refuses a schema diff aimed at a feature
+  branch; that refusal is the rule working, not a bug.
+
 ## Worktrees (parallel tasks)
 
 <!-- Customize: if you declined the worktree module at adoption, delete this section
@@ -73,6 +112,9 @@ in this page — file it.
   [prompt]` — cuts `<branch>` from the latest default branch into `../<repo>-wt-<name>`,
   provisions it (filtered `.env` + install), and opens a workspace running the agent beside
   yours where cmux is running (`cmux new-split right` adds a shell pane if you want one).
+  `--base feature/<topic>` before the name cuts it from that feature branch instead
+  (`/do` passes it itself when it spawns a sub-task; you only need it when you start one
+  by hand).
   Everything after the branch is the agent's FIRST TURN (`… fix/links "/do 46"`) — pass it
   whenever the task is already known: a workspace opened without it is an agent waiting
   for input nobody is going to type. Without cmux the worktree is still ready but the
@@ -197,6 +239,10 @@ because neither half can do the other's job:
   hygiene** (body + title greps) and **Security** (gitleaks). Build is a STEP inside `checks`,
   not a job of its own: GitHub bills per job rounded up to the minute, so a second runner
   costs ~2 billed minutes for ~40s of work.
+- **One more runs AFTER a merge, not before**: **Feature merge** closes the sub-issues a
+  PR into a feature branch names (GitHub only does that on a trunk merge) and ticks their
+  lines in the umbrella. Seconds of work, never a required check — there is nothing left
+  to block once the PR has merged.
 - **A doc-only PR runs no real CI, on purpose.** `ci.yml` ignores `docs/**`, `**.md`
   (anywhere, root included) and the agent-config directories; `ci-docs.yml` — its no-op
   twin — reports the green `checks` for exactly those PRs, so a required status check
@@ -211,9 +257,10 @@ because neither half can do the other's job:
 
 <!-- Customize: nothing — these two rules ARE the branch protection until you buy the real thing. -->
 
-- You are the only merger; squash only. The two hard rules (never merge while "Update branch"
-  is visible; never merge without green CI on the PR's LATEST commit) are in `AGENTS.md`
-  "Getting to master".
+- You are the only merger; squash only — into the trunk and into a feature branch alike.
+  The two hard rules (never merge while "Update branch" is visible; never merge without
+  green CI on the PR's LATEST commit) are in `AGENTS.md` "Getting to master"; a feature
+  PR adds a third: never before you have tried the feature branch yourself.
 - Independent review before merging substantive PRs: a FRESH agent session runs
   `/review <n>` — cross-family review is deliberate. Wait for `VERDICT: approve`,
   **posted as a comment on the PR**. A reviewer that reports a verdict only in its own chat
@@ -292,5 +339,7 @@ because neither half can do the other's job:
 | CI red on `gitleaks`           | Treat as a real leak until proven otherwise; if real: rotate the credential FIRST     |
 | CI red on the build step       | The author fixes it, never you — it fails before the test step, so it fails cheap     |
 | PR hygiene red                 | The body is missing its issue link or its `## Docs` answer — the author writes both   |
+| A merged sub-PR left its issue open or its umbrella line unticked | Open the **Feature merge** run on that PR (Actions tab): the body had no `Closes #N`, or the umbrella line is not in the `- [ ] #N` form. Fix the line by hand this once; the next sub-PR's author fixes the habit |
+| `/ship` refused a sub-task for touching the schema | By design: a schema change goes to the trunk as its own small PR, then the task rebases onto it — `AGENTS.md` "Specs and plans" |
 | No verdict comment after `/ship` | Look at the `review #<pr>` workspace's pill first — `Waiting for you` means answer the prompt there, `Failed` means run `/review <n>` yourself. The PR's `auto-review` status says the same: pending = still running (past an hour it names the age and whether the terminal is still moving); red = ended without posting; missing = never launched. Detail: `.git/auto-review-<pr>.log` in the author's working copy |
 | A shipped workspace still says "Needs input" | The pill swap needs about a minute, and it happens once per `/ship` — if you typed into that session after shipping, its real "Needs input" is back and correct. A workspace that never swaps means the launcher could not match it to the PR's branch; `.git/auto-review-<pr>.log` says "author workspace: unresolved" |

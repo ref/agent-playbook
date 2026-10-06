@@ -2,9 +2,12 @@
 
 <!-- Customize: whether agents commit/push freely or ask first, and what counts as destructive here. -->
 
-Trunk-based, single branch: `{{DEFAULT_BRANCH}}`. Every change lands via a PR the HUMAN
-merges (squash). The human does NOT read diffs — quality is enforced by CI, an independent
-reviewer pass, and the rules below.
+Trunk-based: `{{DEFAULT_BRANCH}}` is the only branch that deploys, and every change lands
+on it via a PR the HUMAN merges (squash). A feature too big for one PR gets a FEATURE
+BRANCH between its task branches and the trunk ("Feature branches" below) — its pieces
+land there one PR at a time, and the trunk gets the whole feature in one PR after the
+human has tried it. The human does NOT read diffs — quality is enforced by CI, an
+independent reviewer pass, and the rules below.
 
 - **Commit as you go**, in logical well-scoped commits. Never add `Co-Authored-By`,
   `Claude-Session:` or any other AI-attribution or session-link trailer — a
@@ -65,8 +68,22 @@ The cycle:
   and `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`, one PR, `Refs #<seed>` — a spec gets
   the same independent review as code, and spec errors are the expensive ones.
 - **The plan's phases become sub-issues**, one per future PR, each `Refs #<umbrella>`; the
-  seed issue becomes the umbrella, its body a task-list checklist of the sub-issues. The
-  docs are the snapshot; the umbrella issue is the live state.
+  seed issue becomes the umbrella, its body a task-list checklist of the sub-issues — one
+  line per sub-issue, in the form `- [ ] #<n> — <title>`, because the merge workflow
+  ticks the line by that number. The docs are the snapshot; the umbrella issue is the
+  live state.
+- **The umbrella gets a feature branch** unless the human says its phases may ship one
+  by one: the spec+plan session asks, and when the answer is a feature branch it creates
+  `feature/<topic>` from the trunk and writes `Branch: feature/<topic>` on its own line
+  in the umbrella body. That line is what every later `/do <sub-issue>` reads to find its
+  base ("Feature branches" below). No line → the sub-issues' PRs go to the trunk.
+- **A change to the schema surface never rides a feature branch.** Whatever the plan's
+  phase, a new table, column or index goes to the trunk as its own small PR, additive
+  and backward-compatible (the deployed code must not notice it); the phase that uses it
+  starts only after that PR has merged AND the trunk has been merged into the feature
+  branch. Removing what the feature replaced is a separate PR after the feature lands.
+  This keeps one shared dev database valid for the trunk and the feature at once
+  ("Shared mutable state"), and keeps the schema lock's view of the world true.
 - **Implementation happens in FRESH sessions** — one `/do <n>` per sub-issue, reading only
   the spec, the plan and the issue. The spec+plan session never implements.
 - **A brainstorm that outgrows its session hands off as a COMMENT on the seed issue** — a
@@ -88,23 +105,70 @@ The cycle:
 
 <!-- Customize: nothing, usually — this section is the load-bearing invariant. -->
 
-- Each task gets a FRESH branch from the latest default branch:
+- Each task gets a FRESH branch from the latest state of its BASE — the default branch,
+  or the feature branch its umbrella names ("Feature branches" below):
 
       git fetch origin --prune
-      git switch -C <type>/<short-name> origin/{{DEFAULT_BRANCH}}   # type: fix | feat | chore
+      git switch -C <type>/<short-name> origin/<base>   # type: fix | feat | chore
 
+  `feature/` is reserved for feature branches; a task branch is never named that.
 - One branch = one PR = one logical change. Small and short-lived.
 - **NEVER reuse a branch after merge** — a squashed branch's commits are ancestors of
-  nothing on the default branch, so a reused branch silently re-proposes work that already
-  landed. Re-sync and cut a new one.
-- Rebase onto `origin/{{DEFAULT_BRANCH}}` before opening a PR, and again whenever the
-  default branch moves while your PR is open.
+  nothing on the branch it merged into, so a reused branch silently re-proposes work
+  that already landed. Re-sync and cut a new one.
+- Rebase onto `origin/<base>` before opening a PR, and again whenever the base moves
+  while your PR is open.
 - **Acceptance is serial even when the work is not**: when three or more open PRs are
-  READY to merge (green CI *and* an approve verdict), start no new task until the queue
-  drains. Ready, deliberately, not open — a PR waiting on a blocker fix sits in the
-  author's queue, not the human's.
+  READY to merge (green CI *and* an approve verdict), whatever their base, start no new
+  task until the queue drains. Ready, deliberately, not open — a PR waiting on a blocker
+  fix sits in the author's queue, not the human's.
 - **Entry point: `/do <n>`** (`.agents/skills/do/SKILL.md`). The rules stay HERE; the
   skill points at them and loses on drift.
+
+## Feature branches (a feature lands on the trunk whole)
+
+<!-- Customize: nothing, usually — the rules below are what keeps a long-lived branch mergeable. -->
+
+A feature whose phases are unusable until the last one lands does not reach users one
+PR at a time: it grows on `feature/<topic>` and reaches `{{DEFAULT_BRANCH}}` in ONE PR,
+after the human has tried the whole thing. Small work with no umbrella goes straight to
+the trunk as before.
+
+- **One feature branch per umbrella issue**, cut from the trunk, named on its own line
+  in the umbrella body: `Branch: feature/<topic>`. The spec+plan session creates it;
+  `/do` creates it when the line names a branch that does not exist yet.
+- **A sub-issue's task branch is cut from the feature branch, and its PR targets the
+  feature branch.** Same CI, same review, same human merge (squash) — only the base
+  differs. Nothing deploys.
+- **The feature branch takes the trunk by MERGE, never by rebase**:
+  `git merge origin/{{DEFAULT_BRANCH}}` on the feature branch, then push. A rebase
+  rewrites commits the open sub-PRs were cut from, and every one of them re-proposes
+  the old history. Agents do this merge themselves — before cutting a sub-task when the
+  feature branch is behind, and in `/ship` before the feature's own PR — and it is the
+  one case where an agent pushes to a branch it did not cut. Never force-push a feature
+  branch. Conflicts are resolved honestly, per file; a lockfile is never resolved by hand.
+- **The feature branch is not protected server-side, on purpose** (the playbook's
+  SETUP.md §2 explains): a ruleset there would refuse the merge above and the
+  "Update branch" button alike. Its gate is the trunk's: the feature PR runs every
+  required check and gets its own review before it can merge.
+- **Pausing is free**: leave the branch where it is. Resuming starts with the merge
+  above; the longer the pause, the more that merge has to resolve, and that is the
+  whole cost.
+- **The hand check happens in the human's own checkout** on the feature branch; a bug
+  found there is a new sub-issue, `/do`, PR into the feature branch.
+- **The feature PR** (`feature/<topic>` → `{{DEFAULT_BRANCH}}`) is opened by `/ship` run
+  on the feature branch: it carries `Closes #<umbrella>`, lists the sub-PRs that make it
+  up, and gets an INTEGRATION review (`.agents/skills/review/SKILL.md`) — the pieces
+  were each reviewed on the way in, so the reviewer checks the sum, the seams and the
+  gate, not every line again. The human merges it (squash) after the hand check.
+- **After the merge the feature branch is dead**: GitHub deletes it, and a second wave
+  of the same topic is a new umbrella with a new branch — "never reuse a branch after
+  merge" applies here with full force.
+- **Sub-issues close on merge.** `Closes #<sub-issue>` in a sub-PR's body closes nothing
+  by itself — GitHub only honors it on a trunk merge — so the committed
+  `feature-merge.yml` workflow closes those issues when the sub-PR merges into the
+  feature branch and ticks their `- [ ] #<n>` line in the umbrella. The same workflow
+  ticks the line on a trunk merge too, where GitHub already did the closing.
 
 ## Magnet files (one in-flight branch at a time)
 
@@ -132,6 +196,9 @@ Where all working copies share ONE dev database (or any other single-writer reso
   before the next schema task starts. The same rule prevents two branches numbering the
   same migration from a stale base.
 - The schema-changing branch commits its generated migration in the SAME PR.
+- A schema change never rides a feature branch ("Specs and plans"): it goes to the
+  trunk as its own PR, so the shared instance never holds a migration the trunk does
+  not know. `/ship` refuses a schema-surface diff whose PR base is not the trunk.
 - <!-- Customize: keep this bullet only where ADOPT.md's schema-lock check is installed; delete it otherwise. -->
   The one-branch rule is MACHINE-ENFORCED — `{{PKG_MANAGER}} run check:schema-lock`,
   part of the local gate. It is fail-closed: a source it cannot query (no `gh`) goes red
@@ -148,16 +215,18 @@ If the repo has suites CI cannot run (a DB-gated smoke suite, a hardware test), 
 here WITH the condition that makes them mandatory. -->
 
 - **`/ship`** (`.agents/skills/ship/SKILL.md`) executes this section — refuse on the
-  default branch or a dirty tree, rebase, gate, push, PR. This section stays canonical: on
-  drift it wins and the skill file is the bug.
+  default branch or a dirty tree, rebase onto the PR's base, gate, push, PR. On a
+  feature branch it ships the FEATURE: merge the trunk in, gate, push, the feature PR.
+  This section stays canonical: on drift it wins and the skill file is the bug.
 - Run the full local gate before pushing (format with the repo's formatter, never by hand):
 
       {{PKG_MANAGER}} run format:check && {{PKG_MANAGER}} run type-check && {{PKG_MANAGER}} run lint && {{PKG_MANAGER}} run knip && {{TEST_CMD}}{{RUST_GATE}}
 
-- Push your branch and open a PR against `{{DEFAULT_BRANCH}}`:
+- Push your branch and open a PR against its base — `{{DEFAULT_BRANCH}}`, or the feature
+  branch the umbrella names:
 
       git push -u origin <branch>
-      gh pr create --base {{DEFAULT_BRANCH}} --title "<conventional commit title>" --body "..."
+      gh pr create --base <base> --title "<conventional commit title>" --body "..."
 
 - The PR title becomes the squash-commit title — write it as a conventional commit
   (`PR hygiene` fails a non-conventional title).
@@ -169,12 +238,15 @@ here WITH the condition that makes them mandatory. -->
   this file, or `docs/*`, the same PR updates the doc. Anything the HUMAN runs or must
   remember goes into `docs/RUNBOOK.md` — the reviewer blocks on omissions.
 - Every PR body links its issue: `Closes #N` (auto-closes and cross-links on squash-merge —
-  that cross-link IS the history), `Refs #N` for an umbrella that stays open across PRs,
+  that cross-link IS the history; into a feature branch, `feature-merge.yml` does the
+  closing), `Refs #N` for an umbrella that stays open across PRs — a spec PR, a sub-PR
+  that leaves its umbrella open — while the feature PR itself writes `Closes #<umbrella>`,
   `No issue` only when there genuinely isn't one. `PR hygiene` fails a body with none.
-- The HUMAN merges (squash). Agents never merge, never push to `{{DEFAULT_BRANCH}}`, never
-  rewrite its history — **green CI is NOT permission to merge.** The human's ritual: never
-  merge while "Update branch" is visible; never merge without green CI on the LATEST
-  commit.
+- The HUMAN merges (squash) — every PR, into the trunk and into a feature branch alike.
+  Agents never merge, never push to `{{DEFAULT_BRANCH}}`, never rewrite its history —
+  **green CI is NOT permission to merge.** The human's ritual: never merge while "Update
+  branch" is visible; never merge without green CI on the LATEST commit; never merge a
+  feature PR before trying the feature branch by hand.
 - The committed `.githooks/pre-push` hook blocks direct pushes to the default branch and
   runs the static gate; the server-side branch ruleset (the playbook's SETUP.md §2), where
   configured, enforces the same lock on GitHub's side. Never bypass it —
@@ -262,6 +334,8 @@ local default branch is current — `git fetch` first.
 <!-- Customize: append a line the first time an agent does something you had to undo by hand. -->
 
 - Force-pushing or rewriting `{{DEFAULT_BRANCH}}`.
+- Rebasing or force-pushing a `feature/*` branch — it takes the trunk by merge only
+  ("Feature branches"); open sub-PRs hang off its commits.
 - Deleting branches or working copies you didn't create. (The worktree module's own
   commands — `task:finish`, `worktree:gc` — are the sanctioned path THROUGH this rule,
   not around it: they delete only behind a predicate that proves the deletion loses
@@ -274,7 +348,8 @@ local default branch is current — `git fetch` first.
   on a task that is not about those files.
 
 The "commit/push freely" rule applies to YOUR OWN branch only — never to
-`{{DEFAULT_BRANCH}}`.
+`{{DEFAULT_BRANCH}}`, and to a feature branch only for the trunk merge "Feature branches"
+describes.
 
 ## Tooling decision records (don't re-propose without NEW evidence)
 
