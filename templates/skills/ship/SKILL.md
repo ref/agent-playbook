@@ -1,9 +1,9 @@
 ---
 name: ship
-description: Take a finished task branch in this repo to a pull request — rebase, full local gate, push, open the PR against the default branch. Use when asked to ship, push, or open a PR for the current branch, whichever tool you are.
+description: Take a finished task branch in this repo to a pull request — rebase onto its base, full local gate, push, open the PR against the default branch or the feature branch the task belongs to; on a feature branch, ship the whole feature to the default branch. Use when asked to ship, push, or open a PR for the current branch, whichever tool you are.
 ---
 
-You are shipping the current task branch: rebase onto the default branch, run the gate,
+You are shipping the current branch: bring it up to date with its base, run the gate,
 push, open the PR. Run this when the work is done and committed.
 
 **`AGENTS.md` "Getting to master" in THIS repo is canonical** — it defines this ritual and
@@ -14,6 +14,18 @@ Detect the default branch rather than assuming its name:
 
     DEFAULT=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
 
+Then resolve the BASE this branch's PR targets — the trunk is not a safe default, a
+sub-task shipped there deploys half a feature (AGENTS.md "Feature branches"):
+
+- **The current branch is `feature/<topic>`** → this is a FEATURE SHIP: `BASE=$DEFAULT`,
+  and steps 2 and 5 take their feature-ship form below.
+- **A PR already exists for this branch** → `BASE=$(gh pr view --json baseRefName -q
+  .baseRefName)`; the base was decided when it was opened.
+- **Otherwise** → the issue this branch closes decides, exactly as the `do` skill's step 2
+  resolves it: the issue's umbrella (`Refs #<umbrella>`) carries `Branch: feature/<topic>`
+  on its own line → that branch; the issue says it ships to the trunk, or there is no
+  such line → `$DEFAULT`. Unsure which issue → ask, never guess the trunk.
+
 ## 1. Refuse to ship the wrong thing
 
     git status -sb
@@ -23,14 +35,24 @@ Detect the default branch rather than assuming its name:
 - **Dirty tree** → STOP. Commit the work first (AGENTS.md "Workflow" says whether that needs
   approval), or say what the stray files are. A rebase over uncommitted changes is how work
   gets lost.
+- **Feature ship with unticked lines in the umbrella checklist** → STOP and say which
+  sub-issues are still open; the feature PR is for a finished feature.
 
-## 2. Rebase onto the default branch
+## 2. Bring the branch up to date with its base
+
+A task branch REBASES onto its base:
 
     git fetch origin --prune
-    git rebase origin/$DEFAULT
+    git rebase origin/$BASE
 
-The default branch moves under open PRs; a stale base can silently reverse a recent merge in
-the squash.
+The base moves under open PRs; a stale base can silently reverse a recent merge in the
+squash.
+
+A feature branch (feature ship) MERGES the trunk in — never a rebase, the open sub-PRs
+hang off its commits (AGENTS.md "Feature branches"):
+
+    git fetch origin --prune
+    git merge origin/$DEFAULT
 
 On conflict: resolve honestly, per the file. **A lockfile is never resolved by hand** —
 resolve the manifest (`package.json` or equivalent), then re-run the package manager's
@@ -49,6 +71,16 @@ guarantee. Formatting is fixed by running the formatter, never by hand. A dead-c
 hit is fixed, not silenced; a genuine false positive goes into the tool's config file WITH a
 comment saying why.
 
+**One more check when `BASE` is a feature branch:** a schema-surface change never rides
+a feature branch (AGENTS.md "Specs and plans") — it ships to the trunk as its own PR.
+List the files this branch changes (`git diff --name-only origin/$BASE...HEAD`) and read
+them against the repo's declaration of its schema surface (`scripts/schema-lock.config.mts`
+where the schema-lock check is installed; AGENTS.md "Shared mutable state" otherwise).
+Any match → STOP: say which files, and that they belong in a separate trunk-bound PR,
+additive and backward-compatible, with this branch rebased onto the trunk after it
+merges. There is no override; the human cannot keep one dev database valid for two
+schemas.
+
 ## 4. Push
 
     git push -u origin <branch>
@@ -61,20 +93,25 @@ master").
 
 ## 5. Open the PR
 
-    gh pr create --base "$DEFAULT" --title "<conventional commit title>" --body "..."
+    gh pr create --base "$BASE" --title "<conventional commit title>" --body "..."
 
 If a PR already exists for this branch, step 4's push updated it — don't open a second one.
 
 **Title:** a conventional commit (`feat(feed): …`, `fix: …`, `chore(agents): …`). It becomes
-the squash-commit title on the default branch, and the `PR hygiene` check fails a
-non-conventional one.
+the squash-commit title on the base branch, and the `PR hygiene` check fails a
+non-conventional one. A feature ship's title names the feature (`feat(i18n): …`) — it is
+the one commit the trunk will keep of it.
 
 **Body:** follow `.github/pull_request_template.md`. Two sections are the ones that matter,
 and you must WRITE them, not fill them:
 
 - **The issue link** — `Closes #N` (auto-closes the issue and cross-links this PR into its
-  timeline on squash-merge; that cross-link IS the history), `Refs #N` for an umbrella issue
+  timeline on squash-merge; that cross-link IS the history — into a feature branch the
+  committed `feature-merge.yml` workflow does the closing), `Refs #N` for an umbrella issue
   that stays open across several PRs, or `No issue` only when there genuinely isn't one.
+  A feature ship writes `Closes #<umbrella>` and, under "What & why", the list of sub-PRs
+  that make it up (`gh pr list --state merged --base <feature-branch>`): that list is
+  what the integration reviewer checks the diff against.
 - **`## Docs`** — every doc this diff makes stale, one `* <file> — <what changed>` bullet
   each, or `Docs: none — <real reason>`. Doc drift is a bug: if the diff changes behavior
   described in `README.md`, `AGENTS.md` or any `docs/*` page, this PR updates it. Anything
@@ -88,7 +125,9 @@ Stop and answer both questions for real.
 Also fill, honestly:
 
 - **How to test by hand** — the ONLY section the human reads before testing. Concrete
-  click-through steps: where to go, what to click, what must happen.
+  click-through steps: where to go, what to click, what must happen. For a feature ship:
+  the whole feature, end to end, on the feature branch — the human tries it there
+  BEFORE merging (AGENTS.md "Feature branches").
 - **Risk nearby** — what this could regress, and any test change declared explicitly. A
   deleted/skipped/weakened test with no justification here is a reviewer blocker.
 - If the diff touches anything AGENTS.md flags as one-branch-at-a-time (a schema, a
@@ -127,4 +166,6 @@ env vars, dashboard clicks, one-off SQL), and that a substantive PR gets an inde
 `review` pass from a FRESH session — ideally a different model family, which is the one
 hard rule in AGENTS.md "Model routing" — before the human merges. If you launched the
 auto-review hook, that fresh session is already running and its verdict lands as a PR
-comment. You never merge, and green CI is not permission to merge.
+comment. A feature ship gets the `review` skill's INTEGRATION form — the pieces were
+reviewed on the way in — and the human merges it only after trying the feature branch
+by hand; say both. You never merge, and green CI is not permission to merge.
