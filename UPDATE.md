@@ -81,8 +81,14 @@ five skills (`do`, `ship`, `review`, `playbook-update`, `playbook-compact`),
 `dependabot.yml`, `.githooks/pre-push`, `.claude/settings.json`, `.agents/auto-review.sh`,
 the worktree module (`scripts/*.mts` + their tests), the schema-lock module
 (`scripts/schema-lock.mts`, `scripts/check-schema-lock.mts`, `scripts/schema-lock.test.ts`
-— its config file is wholly local, below) and the task-status module
-(`.agents/task-status.sh`, `.agents/task-status-stop.mjs` + their two tests).
+— its config file is wholly local, below), the task-status module
+(`.agents/task-status.sh`, `.agents/task-status-stop.mjs` + their two tests) and the
+dashboard module where the repo has it (`.agents/dashboard.sh`, `dashboard-data.mjs`,
+`dashboard.html`, `ask.sh`, `ask-page.mjs`, `ask.html` + their two tests, and the
+`dashboard` skill). Where the repo does NOT have the dashboard module and cmux is
+present on the machine, OFFER it (ADOPT.md's section) — a repo adopted before it
+existed is otherwise never asked; where cmux is absent, never: the module has nowhere
+to open.
 Compare byte-for-byte; a
 difference is drift to sync — EXCEPT these declared local parts, which always survive:
 
@@ -135,7 +141,9 @@ difference is drift to sync — EXCEPT these declared local parts, which always 
   the offer is ADOPT.md's whole "Rust" section (the CI job and its twin, the audit job,
   the scripts, the gate lines), reported under "static-gate gaps" below.
 - `settings.json` — everything except the template's own content: the `attribution`
-  keys, the auto-review allow rule, and the task-status `hooks` entries; the file was
+  keys, the three `Bash(.agents/…:*)` allow rules (`auto-review.sh`, `dashboard.sh`,
+  `ask.sh` — the two dashboard rules travel with the module and are harmless without
+  it), and the task-status `hooks` entries; the file was
   installed by merging, so local content is the design working. The hooks entries are
   checked by PRESENCE, never by byte comparison — a merged file can never compare
   byte-for-byte, so a missing block is invisible to the Class A diff. Every sync:

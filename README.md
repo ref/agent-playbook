@@ -65,7 +65,10 @@ docs/RUNBOOK.md                    the human's page: what YOU run and remember (
 .githooks/pre-push                 the lock: no direct pushes to the default branch
 .claude/settings.json              no AI-attribution trailers; allows the reviewer launch
 .agents/skills/*/                  the protocols (do, ship, review, playbook-update,
-                                   playbook-compact); .claude/skills/* symlink to them
+                                   playbook-compact, dashboard); .claude/skills/* symlink to them
+.agents/dashboard.sh, ask.sh       optional (cmux): /dashboard opens a live page of the
+                                   repository's state; ask.sh puts a choice to the human
+                                   on a page beside the agent's terminal
 .agents/playbook.lock              which playbook commit this repo is synced to
 .agents/auto-review.sh             optional: /ship starts the cross-family reviewer itself
 scripts/*.mts                      optional worktree module: task:start / task:finish / worktree:gc
@@ -85,6 +88,14 @@ the same reviewer pass.
 human merge, nothing deployed), the human tries the finished branch, and `/ship` on it
 opens the one PR that takes the whole feature to the trunk. Small fixes keep going
 straight to the trunk in between, and a feature can sit paused for a month at no cost.
+
+**`/dashboard` answers "where are we" without a chat.** One browser tab per
+repository in its own cmux workspace: feature branches against their umbrella issues,
+PRs by stage (a verdict counts only for the head it names), open issues, the task
+worktrees with their pills, the latest merges. It refreshes itself every minute and at
+once after a ship, a verdict or a finished task. The same module lets an agent put a
+choice to you on a page beside its terminal instead of in prose; closing the tab means
+"ask me in the chat".
 
 **The review starts itself.** With a reviewer CLI chosen at adoption (a different model
 family than the tool writing your PRs), `/ship` opens a visible cmux workspace

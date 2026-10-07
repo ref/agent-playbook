@@ -19,9 +19,10 @@ before writing anything.
 Outranks everything below. **Never overwrite an existing file or setting without showing
 the exact diff and getting a yes** — one file at a time. A destination that does not exist
 yet you may write freely. Two standing cases: an existing `.claude/settings.json` is
-MERGED, never replaced (the template owns only the `attribution` keys, the
-`Bash(.agents/auto-review.sh:*)` allow rule — without that rule, restricted permission
-modes silently block the reviewer launch — and the task-status `hooks` entries; a
+MERGED, never replaced (the template owns only the `attribution` keys, the three
+`Bash(.agents/…:*)` allow rules for `auto-review.sh`, `dashboard.sh` and `ask.sh` —
+without them, restricted permission modes silently block the reviewer launch, the
+dashboard push and the question page — and the task-status `hooks` entries; a
 repo's own hooks beside those entries are untouched); and an occupied `core.hooksPath` (husky,
 lefthook) is never re-pointed — offer chaining (`sh .githooks/pre-push "$@" < /dev/stdin`)
 or moving the hook into their directory, and say plainly that until resolved nothing
@@ -38,15 +39,17 @@ blocks a direct push.
 | `dependabot.yml`             | `.github/dependabot.yml`                             |
 | `githooks/pre-push`          | `.githooks/pre-push` (chmod 755)                     |
 | `settings.json`              | `.claude/settings.json` (merge into existing)        |
-| `skills/*/` (5 skills)       | `.agents/skills/<name>/SKILL.md`                     |
+| `skills/*/` (6 skills)       | `.agents/skills/<name>/SKILL.md` (`dashboard` only with its module) |
 | `scripts/auto-review.sh`     | `.agents/auto-review.sh` (755; only with a reviewer) |
 | `scripts/task-status/*` (4)  | `.agents/` (755 on the `.sh`; installed by default)  |
+| `scripts/dashboard/*` (8)    | `.agents/` (755 on the two `.sh`; only when the dashboard module is wanted — needs cmux) |
 | `scripts/worktree/*` (9)     | `scripts/` (only when the worktree module is wanted) |
 | `scripts/schema-lock/*` (4)  | `scripts/` (only when the schema-lock check is wanted) |
 | `tooling/*` (3)              | repo root (only the ones "The static gate" installs)  |
 | `rust/*` (6 fragments)       | spliced into the files above — only where a Cargo.toml exists ("Rust"); never installed as files |
 
-Plus five RELATIVE symlinks: `.claude/skills/<name>` → `../../.agents/skills/<name>`.
+Plus one RELATIVE symlink per installed skill — five, six with the dashboard module:
+`.claude/skills/<name>` → `../../.agents/skills/<name>`.
 `.agents/` is the vendor-neutral home — Codex/ChatGPT and Antigravity/Gemini read it
 directly, Claude Code follows the symlink. Never create per-vendor copies (`.gemini/`,
 `.codex/`); copies drift. If `.claude/skills/<name>` already exists as a real directory,
@@ -494,6 +497,50 @@ the suite count actually went UP (a glob that skips dot-directories silently lea
 them dormant; one adopted repo's root suite went 105 → 151 with them in). Where the repo has
 no runner, install them anyway and say the safety net is dormant until one exists.
 
+## The dashboard and the question page (optional — ask, cmux only)
+
+Offer this only where cmux was detected: both halves open browser tabs in cmux, and
+without it the module is eight files that print "not here" and exit. Ask: "Do you want
+the repository dashboard (`/dashboard`) and the question page?" What it buys:
+
+- **The dashboard** — `/dashboard`, or `.agents/dashboard.sh start`, opens ONE browser
+  tab per repository in its own cmux workspace (`dashboard · <repo>`, placed right after
+  the caller's in its group): feature branches against their umbrella issues, open PRs
+  by stage (ready / blocker / CI failed / CI running / awaiting review / draft — a
+  verdict counts only for the head it names, so a fix push never shows a stale approve
+  as "ready"), open issues, the task worktrees with their sidebar pills, the latest
+  merges. A detached loop (setsid via perl, the auto-review.sh pattern) refreshes it
+  every minute and ends itself when the tab is gone; `ship`, the review launcher and
+  `task:finish` push at once. `dashboard.sh json` prints the same data for an agent
+  asked "where are we", and works without cmux.
+- **The question page** — `.agents/ask.sh <question.json>` opens a page in a split
+  beside the agent's terminal: a title, the question, 1–9 options, a free-text note;
+  the answer comes back as JSON. Every failure is an exit code the skills read as "ask
+  in the chat": no cmux (3), timeout (4, 540 s by default), the tab closed by the human
+  (5), a reviewer session (6 — `REVIEW_PROMPT` in the environment), a malformed
+  question (2, before any tab opens).
+
+If yes: install the eight `scripts/dashboard/*` files into `.agents/` (755 on
+`dashboard.sh` and `ask.sh`), the `dashboard` skill with its symlink, and the two
+`Bash(.agents/dashboard.sh:*)` / `Bash(.agents/ask.sh:*)` allow rules through the
+`settings.json` merge above. The two test files run under vitest/jest where the repo
+has one, exactly as the task-status tests do — check the suite count went up. Nothing to
+render: both scripts detect cmux, the repository and the caller's workspace at runtime.
+Needs `node` on PATH (the data half and the page renderer) and `perl` for the detached
+loop — without perl the tab still opens and updates on pushes, and `start` says so.
+
+Facts the module rests on, each `[verified-by-execution, cmux 0.65.0]` at the time of
+writing — re-verify on a cmux major, never from memory: `browser open` with no surface
+makes a split in the caller's workspace; `workspace create --layout` with one browser
+surface opens a workspace holding only the page; browser commands (`url`, `eval`,
+`wait`) resolve a surface UUID from any workspace; `wait --function` does NOT notice a
+closed tab (hence the two-second slices in `ask.sh`); `list-status` has no `--json`;
+cmux refuses to close a workspace's last surface, so `stop` closes the dashboard
+workspace instead.
+
+If no: nothing else changes. `ship` and `task:finish` skip a `dashboard.sh` that is not
+there, and `auto-review.sh` does the same.
+
 ## The worktree module (optional — ask)
 
 Ask: "Do you want parallel tasks in git worktrees, each started and retired in one
@@ -666,8 +713,8 @@ one CI run to have happened first. Don't restate its contents.
 One line per check — `PASS`, `FAIL`, or `SKIP <reason>` — printed verbatim, never
 summarized to "all good". A SKIP is not a pass.
 
-1. The five skills are regular files under `.agents/skills/`, AND each
-   `.claude/skills/<name>` is a symlink that resolves. A real directory there = FAIL (a
+1. The five skills (six with the dashboard module) are regular files under
+   `.agents/skills/`, AND each `.claude/skills/<name>` is a symlink that resolves. A real directory there = FAIL (a
    second copy drifts). `.agents/playbook.lock` exists and its `commit` line matches the
    cloned playbook's HEAD.
 2. `grep -rnE '\{\{[A-Z_][A-Z0-9_]*\}\}'` over everything installed — any hit = FAIL.
@@ -707,6 +754,10 @@ summarized to "all good". A SKIP is not a pass.
    entry whose `directory` is the Cargo directory; and `<pkg> run lint:rust` answers
    green on the clean tree (the hook will run it on the first push either way — better
    to learn here).
+10. Dashboard module, where installed: `.agents/dashboard.sh` and `.agents/ask.sh` are
+   executable, `.agents/dashboard.sh json` prints a JSON object with a `repo` key (it
+   needs no cmux; a `gh` failure lands in its `errors` list, not in a crash), `.agents/ask.sh`
+   with no argument exits 2, and `.claude/settings.json` carries both allow rules.
 
 ## Summarize and offer the first commit
 
