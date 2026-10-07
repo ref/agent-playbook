@@ -478,6 +478,22 @@ announce_verdict() {
       review_pill "Verdict posted — read it" eye "#A855F7" done
       ;;
   esac
+  dashboard_push
+}
+
+# Repaint the repository dashboard, if one is open: a verdict moves a PR
+# between stages. Here, inside announce_verdict, because its stamp already
+# makes this once per head whichever half saw the verdict first. The MAIN
+# checkout's copy of the script first — this half may run in the reviewer's
+# worktree, reset to a PR head that predates the dashboard. Best-effort and
+# logged, like every other cmux side effect in this file.
+dashboard_push() {
+  for d in "$MAIN/.agents" "$(dirname "$0")"; do
+    if [ -x "$d/dashboard.sh" ]; then
+      (cd "$MAIN" && "$d/dashboard.sh" push) >>"$LOG" 2>&1 || true
+      return 0
+    fi
+  done
 }
 
 # The paths both halves need. `git worktree list` reports the MAIN checkout

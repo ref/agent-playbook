@@ -60,6 +60,29 @@ in this page — file it.
 
       {{PKG_MANAGER}} run format:check && {{PKG_MANAGER}} run type-check && {{PKG_MANAGER}} run lint && {{PKG_MANAGER}} run knip && {{TEST_CMD}}{{RUST_GATE}}
 
+## The dashboard and the question page
+
+<!-- Customize: delete this section if you declined the dashboard module at adoption. -->
+
+- **Where are we**: `/dashboard` in any agent session (or `.agents/dashboard.sh start`
+  in a terminal) opens the repository dashboard — feature branches against their
+  umbrella issues, PRs by stage (ready to merge, blocker, CI failed, CI running,
+  awaiting review, draft), open issues, the task worktrees with their pills, the latest
+  merges — in its own cmux workspace `dashboard · <repo>` right after yours. It
+  refreshes itself every minute, and at once after `/ship`, a review verdict and
+  `task:finish`. One per repository, wherever you start it from.
+- **Closing it**: `.agents/dashboard.sh stop`, or close the `dashboard · <repo>`
+  workspace — the loop notices on its next tick and ends. Its files live in the main
+  checkout's `.git/`: `dashboard.html`, `dashboard.log`, `dashboard.lock`,
+  `dashboard.surface`, `dashboard.workspace`.
+- **The same answer in a terminal**: `.agents/dashboard.sh json` — what the dashboard
+  shows, as JSON; it works without cmux, and it is what an agent reads when you ask
+  "where are we" in the chat.
+- **A question on a page**: when an agent has a choice to put to you — approaches,
+  shapes, a recommendation to confirm — it may open it as a page in a split beside its
+  terminal: numbered options, a free-text note, `⌘↵` to send. Close the tab to answer in
+  the chat instead; the agent asks again there. The reviewer never does this.
+
 ## Features that take several PRs (feature branches)
 
 <!-- Customize: nothing — the rules are in AGENTS.md "Feature branches"; this is what YOU do. -->
@@ -341,5 +364,7 @@ because neither half can do the other's job:
 | PR hygiene red                 | The body is missing its issue link or its `## Docs` answer — the author writes both   |
 | A merged sub-PR left its issue open or its umbrella line unticked | Open the **Feature merge** run on that PR (Actions tab): the body had no `Closes #N`, or the umbrella line is not in the `- [ ] #N` form. Fix the line by hand this once; the next sub-PR's author fixes the habit |
 | `/ship` refused a sub-task for touching the schema | By design: a schema change goes to the trunk as its own small PR, then the task rebases onto it — `AGENTS.md` "Specs and plans" |
+| The dashboard stopped updating | `.agents/dashboard.sh stop`, then `start`; the loop's log is `.git/dashboard.log`. A `start` that says "already open" for a tab that is gone: remove `.git/dashboard.lock` and `.git/dashboard.surface`, then `start` again. A banner "Partial data" names the source that failed (usually `gh` offline or rate-limited) — the rest is still current |
+| An agent's question page never appeared | Outside cmux, or from the reviewer, the script refuses and the agent asks in the chat — that is the design. Inside cmux: the agent's command timeout was shorter than the page's (`--timeout`, 540 s by default); the agent lowers one or raises the other |
 | No verdict comment after `/ship` | Look at the `review #<pr>` workspace's pill first — `Waiting for you` means answer the prompt there, `Failed` means run `/review <n>` yourself. The PR's `auto-review` status says the same: pending = still running (past an hour it names the age and whether the terminal is still moving); red = ended without posting; missing = never launched. Detail: `.git/auto-review-<pr>.log` in the author's working copy |
 | A shipped workspace still says "Needs input" | The pill swap needs about a minute, and it happens once per `/ship` — if you typed into that session after shipping, its real "Needs input" is back and correct. A workspace that never swaps means the launcher could not match it to the PR's branch; `.git/auto-review-<pr>.log` says "author workspace: unresolved" |

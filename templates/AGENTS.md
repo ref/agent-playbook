@@ -28,6 +28,20 @@ spec seems wrong or a materially better approach exists, say so in the PR body (
 ask if it changes the task). Never silently narrow, widen or transform the task — "while I
 was in there" changes belong in a new issue, not in this PR.
 
+## Asking the human (a page beside the terminal)
+
+<!-- Customize: delete this section where the dashboard module (ADOPT.md) is not installed. -->
+
+Where `.agents/ask.sh` is installed and the question is a CHOICE — two or three
+approaches with trade-offs, a shape to pick, a recommendation to confirm — ask on a page
+in a split beside your terminal instead of in prose: write the question as JSON (title,
+question, optional context, 1–9 options, one of them recommended) and run
+`.agents/ask.sh <file>` as its own command. The answer comes back as JSON on stdout. Any
+non-zero exit — no cmux, the human closed the tab, the timeout, a malformed question —
+means ask the same question in the chat; never retry the page. Give your harness's
+command timeout more than the script's `--timeout` (540 s by default), or the page
+outlives the command that opened it. A free-text question stays in the chat.
+
 ## Specs and plans (upstream of the code)
 
 <!-- Customize: the substantial-work threshold, and the doc paths if the repo keeps them elsewhere. -->
@@ -252,7 +266,8 @@ here WITH the condition that makes them mandatory. -->
   configured, enforces the same lock on GitHub's side. Never bypass it —
   `ALLOW_DIRECT_PUSH`, `SKIP_PUSH_GATE`, `--no-verify` are the human's overrides.
 - **The gates are not part of the work.** `.github/workflows/*`, `.githooks/*`,
-  `.agents/skills/*` and `.agents/auto-review.sh` change only when the issue is ABOUT
+  `.agents/skills/*`, `.agents/auto-review.sh`, `.agents/task-status*`,
+  `.agents/dashboard*` and `.agents/ask*` change only when the issue is ABOUT
   them. Never edit one to get a PR green — not the trigger, not a `paths-ignore`, not an
   `if:`, not a step. A deleted workflow does not turn a check red, it makes the check
   disappear, and this pipeline has no other reader. A genuinely wrong gate is its own PR,
@@ -287,6 +302,10 @@ here WITH the condition that makes them mandatory. -->
 - The reviewer verifies by executing, not by reading alone — throwaway probe tests
   (gitignored, deleted before the verdict), mutation runs, the local gate — and never
   checks out another ref: it may be sitting in the author's working copy.
+- The reviewer never asks the human through a page (`.agents/ask.sh`, "Asking the
+  human"): it runs on a terminal nobody may be watching, and a page waiting there stalls
+  the review. A question goes into the verdict. Machine-enforced: the launcher's
+  `REVIEW_PROMPT` in the environment makes `ask.sh` refuse.
 - **The review starts itself** where `.agents/auto-review.sh` is installed: the `ship`
   skill launches it after every PR open or update, and a fresh session of the repo's
   chosen reviewer CLI follows the same `review` skill and posts the same verdict comment.
@@ -319,9 +338,18 @@ The invariants:
 
 <!-- Customize: how the human starts long-running processes here, or delete if agents may run them. -->
 
-Dev servers exist for the HUMAN's manual testing; agents never start or stop them, or any
-other long-running process. Verify via the static gate above, or by curling a server the
-human already runs.
+Dev servers exist for the HUMAN's manual testing; agents never start or stop them. Verify
+via the static gate above, or by curling a server the human already runs.
+
+The same goes for any other long-running process, with exactly two exceptions, both
+started only because the human asked for them by name and both built the same way — one
+instance per repository behind a lock, a log in `.git/`, a way to stop them, and nothing
+that touches the human's app: the reviewer launcher (`/ship` starts
+`.agents/auto-review.sh`, installed at the human's choice) and the dashboard refresh loop
+(`/dashboard` starts `.agents/dashboard.sh`, which ends itself when its tab is closed).
+An agent never starts a background process on its own initiative, and never adds a
+`gh` call or a `dashboard.sh push` to a task-status hook: those run under a five-second
+timeout, and a push makes network calls.
 
 ## After a merge
 
