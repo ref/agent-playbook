@@ -1,0 +1,155 @@
+<!doctype html>
+<!--
+  The page of `.agents/ask.sh`. One file, no network, no CDN.
+
+  The question is inlined at the placeholder below by ask-page.mjs. Submitting
+  sets window.__answer to a JSON string; ask.sh is polling for exactly that
+  (`cmux browser wait --function`) and reads it back with `eval`, then closes
+  this tab. Closing the tab without submitting is a refusal — ask.sh exits
+  non-zero and the agent asks in the chat instead.
+
+  All question text goes through textContent: it is written by an agent and
+  may quote anything.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Question</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --sel: #eff6ff; --line: #e2e6ec; --text: #0f172a; --muted: #64748b;
+    --blue: #2563eb; --green: #16a34a; --amber: #d97706;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1f24; --card: #262a31; --sel: #1e2a3d; --line: #3a404a; --text: #e6e8eb; --muted: #9aa3ad; --blue: #3b82f6; --green: #8fbf6a; --amber: #e0b354; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 110px; }
+  .asking { color: var(--muted); font-size: 12px; display: flex; gap: 8px; align-items: center; }
+  .asking::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
+  h1 { font-size: 20px; margin: 6px 0 10px; }
+  .context { border-left: 3px solid var(--amber); background: var(--card); padding: 8px 12px; border-radius: 0 6px 6px 0; margin: 0 0 14px; white-space: pre-wrap; }
+  .q { font-weight: 600; margin: 0 0 12px; white-space: pre-wrap; }
+  .opts { display: grid; gap: 8px; }
+  .opt { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+  .opt:hover { border-color: var(--muted); }
+  .opt[aria-checked="true"] { border-color: var(--blue); background: var(--sel); }
+  .opt:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .num { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 5px; font-size: 12px; color: var(--muted); }
+  .opt[aria-checked="true"] .num { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .label { font-weight: 600; }
+  .rec { margin-left: 8px; font-size: 11px; font-weight: 500; color: var(--green); border: 1px solid var(--green); border-radius: 999px; padding: 0 7px; }
+  .desc { color: var(--muted); font-size: 13px; white-space: pre-wrap; }
+  textarea { margin-top: 12px; width: 100%; min-height: 64px; resize: vertical; background: var(--card); color: var(--text); border: 1px dashed var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; }
+  footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); }
+  footer .in { max-width: 760px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 14px; align-items: center; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+  kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font: 11px ui-monospace, Menlo, monospace; }
+  .sp { flex: 1; }
+  #submit { font: inherit; border: 0; border-radius: 8px; padding: 8px 18px; background: var(--blue); color: #fff; cursor: pointer; }
+  #submit:disabled { opacity: .4; cursor: default; }
+  .sent { text-align: center; padding-top: 80px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap" id="form">
+  <div class="asking">The agent is asking</div>
+  <h1 id="title"></h1>
+  <p class="context hidden" id="context"></p>
+  <p class="q" id="question"></p>
+  <div class="opts" id="opts" role="radiogroup"></div>
+  <textarea id="note" placeholder="Add a note, or answer in your own words…" aria-label="Note"></textarea>
+</div>
+<div class="wrap sent hidden" id="sent">
+  <h1>Answer sent</h1>
+  <p class="desc">The agent has it. This tab closes by itself.</p>
+</div>
+<footer id="foot"><div class="in">
+  <span id="keys"></span><span><kbd>Tab</kbd> note</span><span><kbd>⌘↵</kbd> send</span>
+  <span class="sp"></span>
+  <span>Close the tab to answer in the chat instead</span>
+  <button id="submit" disabled>Send</button>
+</div></footer>
+<script>
+(function () {
+  "use strict";
+  var Q = /*ASK_QUESTION*/null;
+  var chosen = null;
+  var opts = [];
+  var submit = document.getElementById("submit");
+  var note = document.getElementById("note");
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function refresh() {
+    opts.forEach(function (b, i) { b.setAttribute("aria-checked", String(i === chosen)); });
+    submit.disabled = chosen === null && note.value.trim() === "";
+  }
+
+  function choose(i) {
+    if (i < 0 || i >= opts.length) return;
+    chosen = chosen === i ? null : i;
+    refresh();
+  }
+
+  function send() {
+    if (submit.disabled || window.__answer !== undefined) return;
+    var o = chosen === null ? null : Q.options[chosen];
+    window.__answer = JSON.stringify({ choice: o ? o.id : null, label: o ? o.label : null, note: note.value.trim() || null });
+    document.getElementById("form").classList.add("hidden");
+    document.getElementById("foot").classList.add("hidden");
+    document.getElementById("sent").classList.remove("hidden");
+  }
+
+  document.title = Q.title;
+  document.getElementById("title").textContent = Q.title;
+  document.getElementById("question").textContent = Q.question;
+  if (Q.context) {
+    var c = document.getElementById("context");
+    c.textContent = Q.context;
+    c.classList.remove("hidden");
+  }
+  document.getElementById("keys").textContent = "";
+  var keys = document.getElementById("keys");
+  keys.appendChild(el("kbd", null, "1"));
+  if (Q.options.length > 1) { keys.appendChild(document.createTextNode("–")); keys.appendChild(el("kbd", null, String(Q.options.length))); }
+  keys.appendChild(document.createTextNode(" choose"));
+
+  var list = document.getElementById("opts");
+  Q.options.forEach(function (o, i) {
+    var b = el("button", "opt");
+    b.type = "button";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", "false");
+    b.appendChild(el("span", "num", String(i + 1)));
+    var body = el("span");
+    var head = el("div");
+    head.appendChild(el("span", "label", o.label));
+    if (o.recommended) head.appendChild(el("span", "rec", "Recommended"));
+    body.appendChild(head);
+    if (o.description) body.appendChild(el("div", "desc", o.description));
+    b.appendChild(body);
+    b.addEventListener("click", function () { choose(i); });
+    list.appendChild(b);
+    opts.push(b);
+  });
+
+  note.addEventListener("input", refresh);
+  submit.addEventListener("click", send);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); return; }
+    if (e.target === note) return;
+    if (/^[1-9]$/.test(e.key)) { choose(Number(e.key) - 1); return; }
+    if (e.key === "Enter" && e.target.tagName !== "BUTTON") { e.preventDefault(); send(); }
+  });
+})();
+</script>
+</body>
+</html>

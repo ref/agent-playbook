@@ -358,4 +358,26 @@ if (match === null) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 3. The dashboard — a retired worktree leaves its "Tasks" row
+// ---------------------------------------------------------------------------
+
+// Best-effort, and after the close on purpose: nothing here may stand
+// between the human and a retired task. The script prints one line in every
+// case (no cmux, no open tab, repainted); a repo without it is silence.
+const dashboard = path.join(mainCheckout, ".agents", "dashboard.sh");
+if (existsSync(dashboard)) {
+  try {
+    execFileSync(dashboard, ["push"], {
+      cwd: mainCheckout,
+      stdio: "inherit",
+      timeout: 90_000,
+    });
+  } catch {
+    console.log(
+      "• dashboard not repainted — it refreshes itself within a minute.",
+    );
+  }
+}
+
 console.log(`\n✓ done: ${name}\n`);

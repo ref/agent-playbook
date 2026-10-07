@@ -5,7 +5,9 @@
   },
   "permissions": {
     "allow": [
-      "Bash(.agents/auto-review.sh:*)"
+      "Bash(.agents/auto-review.sh:*)",
+      "Bash(.agents/dashboard.sh:*)",
+      "Bash(.agents/ask.sh:*)"
     ]
   },
   "hooks": {

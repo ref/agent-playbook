@@ -1,0 +1,239 @@
+<!doctype html>
+<!--
+  The page of `.agents/dashboard.sh`. One file, no network: it must open in a
+  browser tab with the machine offline, so no CDN, no web fonts, no fetch().
+
+  Data arrives two ways and both end in window.__dashboard(data):
+    - inlined at the placeholder below when dashboard-data.mjs writes the page
+      (a reload, or a tab opened later, shows the last push);
+    - `cmux browser eval "window.__dashboard(<json>)"` on every push, which
+      repaints the open tab without reloading it.
+  __dashboard returns the string "ok"; the pusher reads that as "the tab took it".
+
+  Every value from the repository goes through textContent, never innerHTML:
+  a PR title is untrusted text.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --sunk: #f1f3f6; --line: #e2e6ec; --text: #0f172a; --muted: #64748b;
+    --blue: #2563eb; --green: #16a34a; --red: #dc2626; --amber: #d97706; --violet: #7c3aed; --slate: #94a3b8;
+    --green-bg: #f0fdf4; --red-bg: #fef2f2; --amber-bg: #fffbeb; --violet-bg: #f5f3ff; --blue-bg: #eff6ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15181d; --card: #1d2128; --sunk: #232831; --line: #2e343e; --text: #e6e8eb; --muted: #8c95a1;
+      --blue: #60a5fa; --green: #4ade80; --red: #f87171; --amber: #fbbf24; --violet: #a78bfa; --slate: #8c95a1;
+      --green-bg: #15291e; --red-bg: #2a1717; --amber-bg: #2a2414; --violet-bg: #221d36; --blue-bg: #172338;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .errors { margin-top: 12px; border: 1px solid var(--amber); background: var(--amber-bg); border-radius: 6px; padding: 8px 12px; font-size: 12px; }
+  .errors:empty { display: none; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 16px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+  .kpi .v { font-size: 22px; font-weight: 600; }
+  .kpi .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; margin-top: 14px; }
+  @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; min-width: 0; }
+  section.wide { grid-column: 1 / -1; }
+  h2 { margin: 0 0 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; display: flex; justify-content: space-between; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  td { padding: 6px; border-bottom: 1px solid var(--sunk); vertical-align: top; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  .r { text-align: right; }
+  .muted { color: var(--muted); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .badge { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .b-ready { color: var(--green); border-color: var(--green); background: var(--green-bg); }
+  .b-blocker, .b-ci-failed { color: var(--red); border-color: var(--red); background: var(--red-bg); }
+  .b-ci-running, .b-awaiting-review { color: var(--amber); border-color: var(--amber); background: var(--amber-bg); }
+  .b-draft { color: var(--muted); }
+  .stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+  .stage h3 { margin: 0 0 6px; font-size: 11px; font-weight: 600; display: flex; justify-content: space-between; }
+  .card { border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; margin-bottom: 6px; background: var(--sunk); }
+  .card .t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .m { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { color: var(--muted); font-size: 12px; padding: 4px 0; }
+  .bar { height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; margin-top: 4px; }
+  .bar > i { display: block; height: 100%; background: var(--green); }
+  .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; border-radius: 999px; padding: 0 8px; margin: 2px 4px 0 0; border: 1px solid; white-space: nowrap; }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .ab .a { color: var(--green); } .ab .b { color: var(--red); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1 id="repo">Dashboard</h1><span class="sub" id="meta"></span></header>
+  <div class="errors" id="errors"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid">
+    <section class="wide"><h2>Pull requests by stage <span id="pr-count"></span></h2><div class="stages" id="stages"></div></section>
+    <section><h2>Feature branches <span id="br-count"></span></h2><div id="branches"></div></section>
+    <section><h2>Tasks in worktrees <span id="wt-count"></span></h2><div id="tasks"></div></section>
+    <section><h2>Issues <span id="is-count"></span></h2><div id="issues"></div></section>
+    <section><h2>Recent merges into <span id="base"></span></h2><div id="merges"></div></section>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var STAGES = [
+    ["ready", "Ready to merge"], ["blocker", "Blocker"], ["ci-failed", "CI failed"],
+    ["ci-running", "CI running"], ["awaiting-review", "Awaiting review"], ["draft", "Draft"]
+  ];
+  var STAGE_LABEL = {}; STAGES.forEach(function (s) { STAGE_LABEL[s[0]] = s[1]; });
+  var lastAt = null;
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (k === "text") n.textContent = attrs[k];
+      else if (k === "class") n.className = attrs[k];
+      else if (k === "style") n.setAttribute("style", attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    }
+    (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function link(href, text, cls) {
+    return href ? el("a", { href: href, text: text, target: "_blank", rel: "noreferrer", class: cls || "" }) : el("span", { text: text, class: cls || "" });
+  }
+  function ago(iso) {
+    if (!iso) return "";
+    var s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (s < 90) return Math.max(0, Math.round(s)) + "s";
+    if (s < 5400) return Math.round(s / 60) + "m";
+    if (s < 172800) return Math.round(s / 3600) + "h";
+    return Math.round(s / 86400) + "d";
+  }
+  function fill(id, nodes) { var n = document.getElementById(id); n.replaceChildren.apply(n, nodes); }
+  function text(id, t) { document.getElementById(id).textContent = t; }
+  function empty(t) { return el("div", { class: "empty", text: t }); }
+  function table(cols, rows) {
+    var cg = el("colgroup", null, cols.map(function (c) { return el("col", c.w ? { style: "width:" + c.w } : null); }));
+    var head = el("thead", null, [el("tr", null, cols.map(function (c) { return el("th", { text: c.h, class: c.r ? "r" : "" }); }))]);
+    return el("table", null, [cg, head, el("tbody", null, rows)]);
+  }
+  function td(node, cls, title) {
+    var c = el("td", { class: cls || "" }, [typeof node === "string" ? document.createTextNode(node) : node]);
+    if (title) c.title = title;
+    return c;
+  }
+  function issueLink(repo, n) { return link(repo.url ? repo.url + "/issues/" + n : null, "#" + n); }
+  function prLink(repo, n) { return link(repo.url ? repo.url + "/pull/" + n : null, "#" + n); }
+  function progress(c) {
+    var pct = c && c.total ? Math.round(100 * c.done / c.total) : 0;
+    return el("div", { class: "bar", title: c ? c.done + " / " + c.total : "" }, [el("i", { style: "width:" + pct + "%" })]);
+  }
+
+  window.__dashboard = function (d) {
+    var repo = d.repo || {};
+    lastAt = d.generatedAt;
+    document.title = (repo.name || "Repository") + " — dashboard";
+    fill("repo", [link(repo.url, repo.name || "Repository")]);
+    text("base", repo.base || "the default branch");
+    text("meta", "");
+
+    fill("errors", (d.errors || []).length ? [el("b", { text: "Partial data. " }), document.createTextNode(d.errors.map(function (e) { return e.source + ": " + e.message; }).join(" · "))] : []);
+
+    var prs = d.prs || [];
+    var count = function (s) { return prs.filter(function (p) { return p.stage === s; }).length; };
+    var umbrellas = (d.issues || []).filter(function (i) { return i.umbrella; });
+    var linked = (d.tasks || []).filter(function (t) { return !t.main; });
+    var kpis = [
+      ["Open PRs", prs.length], ["Ready to merge", count("ready")], ["Blockers", count("blocker") + count("ci-failed")],
+      ["Task worktrees", linked.length], ["Umbrella issues", umbrellas.length],
+      ["Last merge", d.merges && d.merges[0] ? ago(d.merges[0].at) + " ago" : "—"]
+    ];
+    fill("kpis", kpis.map(function (k) { return el("div", { class: "kpi" }, [el("div", { class: "l", text: k[0] }), el("div", { class: "v", text: String(k[1]) })]); }));
+
+    text("pr-count", String(prs.length));
+    fill("stages", STAGES.map(function (s) {
+      var items = prs.filter(function (p) { return p.stage === s[0]; });
+      return el("div", { class: "stage" }, [
+        el("h3", null, [el("span", { class: "badge b-" + s[0], text: s[1] }), el("span", { class: "muted", text: String(items.length) })])
+      ].concat(items.length ? items.map(function (p) {
+        var meta = p.head + " → " + p.base + " · " + ago(p.createdAt) + (p.reviews ? " · " + p.reviews + " review" + (p.reviews > 1 ? "s" : "") : "");
+        return el("div", { class: "card" }, [
+          el("div", { class: "t", title: p.title }, [prLink(repo, p.number), " " + p.title]),
+          el("div", { class: "m", title: meta, text: meta })
+        ]);
+      }) : [empty("—")]));
+    }));
+
+    var br = d.branches || [];
+    text("br-count", String(br.length));
+    fill("branches", br.length ? [table(
+      [{ h: "Branch" }, { h: "Umbrella", w: "34%" }, { h: "vs " + (repo.base || "base"), w: "74px", r: true }, { h: "PR", w: "170px" }],
+      br.map(function (b) {
+        var um = b.umbrella ? el("div", null, [el("div", { class: "muted", style: "overflow:hidden;text-overflow:ellipsis", title: b.umbrella.title }, [issueLink(repo, b.umbrella.number), " " + b.umbrella.done + "/" + b.umbrella.total]), progress(b.umbrella)]) : el("span", { class: "muted", text: "—" });
+        var ab = el("span", { class: "ab mono", title: "ahead / behind " + (repo.base || "") }, [el("span", { class: "a", text: "+" + (b.ahead == null ? "?" : b.ahead) }), " ", el("span", { class: "b", text: "−" + (b.behind == null ? "?" : b.behind) })]);
+        var pr = b.pr ? el("span", null, [prLink(repo, b.pr.number), " ", el("span", { class: "badge b-" + b.pr.stage, text: STAGE_LABEL[b.pr.stage] || b.pr.stage })]) : el("span", { class: "muted", text: b.basePrs && b.basePrs.length ? "base of " + b.basePrs.map(function (n) { return "#" + n; }).join(", ") : "—" });
+        return el("tr", null, [td(el("span", { class: "mono", text: b.name }), "", b.name + "\n" + (b.lastSubject || "")), td(um), td(ab, "r"), td(pr)]);
+      })
+    )] : [empty("No branches besides " + (repo.base || "the default branch") + ".")]);
+
+    var tasks = d.tasks || [];
+    text("wt-count", String(tasks.length));
+    fill("tasks", tasks.length ? tasks.map(function (t) {
+      var name = t.path.split("/").pop();
+      var head = t.branch || (t.detached ? "detached @ " + t.head : "");
+      var ws = t.workspaces || [];
+      return el("div", { class: "card" }, [
+        el("div", { class: "t", title: t.path }, [name + (t.main ? " (main checkout)" : ""), t.pr ? " · " : "", t.pr ? prLink(repo, t.pr) : null]),
+        el("div", { class: "m", text: head + (ws.length ? "" : " · no workspace") }),
+        ws.map(function (w) {
+          return el("div", { class: "m" }, [el("span", { text: "“" + w.title + "” " }), el("span", null, (w.pills || []).map(function (p) {
+            return el("span", { class: "pill", style: "color:" + (/^#[0-9a-fA-F]{3,8}$/.test(p.color || "") ? p.color : "var(--muted)"), title: p.key, text: p.value });
+          }))]);
+        })
+      ].reduce(function (a, n) { return a.concat(n); }, []));
+    }) : [empty("No worktrees.")]);
+
+    var issues = (d.issues || []).slice().sort(function (a, b) { return (b.umbrella ? 1 : 0) - (a.umbrella ? 1 : 0); });
+    text("is-count", String(issues.length));
+    fill("issues", issues.length ? [table(
+      [{ h: "#", w: "48px" }, { h: "Title" }, { h: "Checklist", w: "90px" }, { h: "Age", w: "44px", r: true }],
+      issues.map(function (i) {
+        return el("tr", null, [td(issueLink(repo, i.number)), td(i.title, "", i.title), td(i.checklist ? el("div", null, [el("span", { class: "muted", text: i.checklist.done + "/" + i.checklist.total }), progress(i.checklist)]) : el("span", { class: "muted", text: "—" })), td(ago(i.createdAt), "r muted")]);
+      })
+    )] : [empty("No open issues.")]);
+
+    var merges = d.merges || [];
+    fill("merges", merges.length ? [table(
+      [{ h: "Commit", w: "72px" }, { h: "Subject" }, { h: "PR", w: "56px" }, { h: "When", w: "50px", r: true }],
+      merges.map(function (m) {
+        return el("tr", null, [td(el("span", { class: "mono", text: m.sha })), td(m.subject, "", m.subject), td(m.pr ? prLink(repo, m.pr) : el("span", { class: "muted", text: "—" })), td(ago(m.at), "r muted")]);
+      })
+    )] : [empty("Nothing merged yet.")]);
+
+    tick();
+    return "ok";
+  };
+
+  function tick() {
+    if (lastAt) text("meta", "updated " + ago(lastAt) + " ago · " + new Date(lastAt).toLocaleTimeString());
+  }
+  setInterval(tick, 15000);
+
+  var initial = /*DASHBOARD_DATA*/null;
+  if (initial) window.__dashboard(initial);
+  else text("meta", "no data yet — run .agents/dashboard.sh push");
+})();
+</script>
+</body>
+</html>

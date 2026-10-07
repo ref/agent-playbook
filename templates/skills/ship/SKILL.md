@@ -161,6 +161,15 @@ DENIED by your harness's permission layer, do not skip silently — say so plain
 allow rule for exactly this command ships in `.claude/settings.json`, so a denial means
 that setting is missing or overridden, and a review the human assumes started never did.
 
+**Then the dashboard:** if `.agents/dashboard.sh` is executable, run it, again as its own
+command:
+
+    .agents/dashboard.sh push
+
+It repaints the repository dashboard if one is open (the PR lands under "Awaiting review")
+and prints one line either way; outside cmux it says so and exits 0. Whatever it prints,
+carry on — it never holds up the hand-off.
+
 Print the PR URL, and state plainly: what still needs doing (anything the human owes —
 env vars, dashboard clicks, one-off SQL), and that a substantive PR gets an independent
 `review` pass from a FRESH session — ideally a different model family, which is the one
