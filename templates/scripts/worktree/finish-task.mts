@@ -96,16 +96,37 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function cmux(cmuxArgs: string[]): string | null {
+type CmuxResult = { ok: true; output: string } | { ok: false; error: string };
+
+// The failure carries cmux's own words. A refused close used to log only
+// "could not be closed", and finding out WHY meant reproducing it by hand —
+// the one line of stderr (`confirmation_required: ...`) would have said it.
+function cmuxRun(cmuxArgs: string[]): CmuxResult {
   try {
-    return execFileSync("cmux", cmuxArgs, {
+    const output = execFileSync("cmux", cmuxArgs, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, CMUX_QUIET: "1" },
-    }).trim();
-  } catch {
-    return null;
+    });
+    return { ok: true, output: output.trim() };
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    const said = typeof stderr === "string" ? stderr.trim() : "";
+    return {
+      ok: false,
+      error:
+        said !== ""
+          ? said
+          : error instanceof Error
+            ? error.message
+            : String(error),
+    };
   }
+}
+
+function cmux(cmuxArgs: string[]): string | null {
+  const result = cmuxRun(cmuxArgs);
+  return result.ok ? result.output : null;
 }
 
 const worktrees = parseWorktreeList(
@@ -344,16 +365,25 @@ if (match === null) {
       `${name}: worktree removed, workspace closing — branch verdict in .git/task-finish-${name}.log`,
     );
   }
-  const closed = cmux(["workspace", "close", match.ref]);
+  // `--force`: since cmux 0.65 a workspace with a running process refuses to
+  // close ("confirmation_required ... retry with --force"), and a --here run
+  // ALWAYS has one — the shell that launched this script. Killing that
+  // process tree is the documented point of this step (header, step 2), so
+  // the flag states the intent rather than overriding a safeguard. It is not
+  // in `cmux workspace close --help`; confirmed by running it
+  // [observed-live, cmux 0.65.0, 2026-10-14].
+  const closed = cmuxRun(["workspace", "close", match.ref, "--force"]);
   console.log(
-    closed === null
-      ? `• workspace “${name}” (${match.ref}) could not be closed — close it by hand.`
-      : `• workspace “${name}” (${match.ref}) closed.`,
+    closed.ok
+      ? `• workspace “${name}” (${match.ref}) closed.`
+      : `• workspace “${name}” (${match.ref}) could not be closed — close it by hand.\n` +
+          `  cmux said: ${closed.error}`,
   );
-  if (closed === null && announce) {
+  if (!closed.ok && announce) {
+    const reason = closed.error.split("\n")[0] ?? closed.error;
     notify(
       "task:finish",
-      `${name}: worktree removed, but the workspace would not close — close it by hand`,
+      `${name}: worktree removed, but the workspace would not close (${reason}) — close it by hand`,
     );
   }
 }
