@@ -134,8 +134,9 @@ gate looks exactly like one that ran it and chose to implement.
      a FEATURE BRANCH (the default: the feature reaches users whole, after the human has
      tried it) or one by one on the trunk (only when every phase is usable on its own).
      The plan also puts every schema-surface change into its own trunk-bound phase,
-     additive and backward-compatible, ordered before the phase that uses it (AGENTS.md
-     "Specs and plans") — a feature branch never carries a migration.
+     additive and backward-compatible, ordered before the phase that uses it — a feature
+     branch never carries a migration, so the shared instance never holds one the trunk
+     does not know (AGENTS.md "Specs and plans", where the repo has that rule).
    - **Decompose into sub-issues** — one per phase (`gh issue create`), each linking the
      spec and carrying `Refs #<issue>`. Edit the seed issue into the umbrella: a task-list
      checklist of the sub-issues in its body, one line per sub-issue in exactly the form
@@ -177,7 +178,8 @@ feature branch:
   written by hand). Create it from the trunk — `git push origin
   origin/$DEFAULT:refs/heads/$BASE` — and carry on.
 - The log is non-empty → the feature branch is BEHIND the trunk. Bring it up to date by
-  MERGE, never rebase (AGENTS.md "Feature branches"), in this working copy, before
+  MERGE, never rebase — a rebase rewrites the commits the open sub-PRs were cut from
+  (AGENTS.md "Feature branches", where the repo has it) — in this working copy, before
   cutting anything:
 
       git switch $BASE
@@ -276,15 +278,20 @@ Two things `ship` deliberately makes you write yourself, with one default from t
 
 - **Issue link:** `Closes #<issue>` — a sub-issue included, whatever its base: into a
   feature branch the committed `feature-merge.yml` workflow does the closing GitHub only
-  does on the trunk, and ticks the umbrella's line. `Refs #<issue>` only for an umbrella
-  / multi-part issue that must stay open across several PRs (a spec+plan PR from step 3
-  always is).
+  does on the trunk, and ticks the umbrella's line. **Where the repo has no
+  `.github/workflows/feature-merge.yml`** (`git ls-files .github/workflows/feature-merge.yml`
+  prints nothing), nothing does either: say so in the PR body, and after the merge close
+  the sub-issue and tick its umbrella line by hand — the checklist is the plan's live
+  state, and a line nobody ticks is a phase nobody can see is done. `Refs #<issue>` only
+  for an umbrella / multi-part issue that must stay open across several PRs (a spec+plan
+  PR from step 3 always is).
 - **`## Docs`:** written fresh, never boilerplate. Answer the real question — which docs does
   this diff make stale, or why genuinely none.
 
-The umbrella's checklist is the live state of the plan, and the workflow keeps it: a
-merged sub-PR whose line stayed unticked means its body lacked `Closes #<n>`, or the
-umbrella line is not in the `- [ ] #<n>` form — fix the line, never the habit of
-checking. When the last line is ticked, the feature is ready for the human's hand check
-and then `/ship` on the feature branch (AGENTS.md "Feature branches") — say so in the
-PR body of the last sub-PR.
+The umbrella's checklist is the live state of the plan, and the workflow keeps it (or
+you do, where the workflow is absent): a merged sub-PR whose line stayed unticked means
+its body lacked `Closes #<n>`, or the umbrella line is not in the `- [ ] #<n>` form — fix
+the line, never the habit of checking. When the last line is ticked, the feature is
+ready for the human's hand check and then `/ship` on the feature branch — the one PR
+that takes the whole feature to the trunk (AGENTS.md "Feature branches", where the repo
+has it) — say so in the PR body of the last sub-PR.

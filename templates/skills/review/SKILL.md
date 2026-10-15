@@ -118,7 +118,8 @@ Rules of engagement:
 **A FEATURE PR gets an INTEGRATION review, not a second line-by-line one.** Head
 `feature/<topic>`, base the default branch (`gh pr view <pr> --json headRefName,baseRefName`).
 Its pieces were each reviewed under this protocol and merged into the feature branch by
-the human (AGENTS.md "Feature branches"); the question now is whether the sum is what
+the human — same CI, same review, same squash, only the base differed (AGENTS.md
+"Feature branches", where the repo has it); the question now is whether the sum is what
 those sub-PRs promised, and whether it survives the trunk. Items 3, 4, 7 and 8 were
 answered per piece and are NOT repeated over the whole diff; in their place:
 
@@ -232,7 +233,8 @@ Checklist, in priority order:
    what the staleness actually is:
    - Not behind → done.
    - Behind with a merge CONFLICT → blocker: the author rebases and resolves (a feature
-     branch MERGES the trunk in instead — AGENTS.md "Feature branches").
+     branch MERGES the trunk in instead, never rebases — the open sub-PRs hang off its
+     commits; AGENTS.md "Feature branches", where the repo has it).
    - Behind, no conflict, but the PR's files OVERLAP what the base changed
      since the merge-base (two seeded commands — `git merge-base HEAD origin/<base>`,
      then `git diff --name-only <that-sha> origin/<base>` with the literal sha, never

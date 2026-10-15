@@ -12,8 +12,10 @@
 # The local half of the same policy is your package manager's minimum-release-age
 # setting — see docs/RUNBOOK.md "Dependency cooldowns".
 #
-# A repo that builds its own image adds a `docker` entry per ADOPT.md — a declared
-# local part every sync preserves; this template ships without it on purpose.
+# A repo that builds its own image adds a `docker` entry per ADOPT.md, and one with
+# manifests in other ecosystems (a go.mod, a pyproject.toml, a second package root)
+# adds their entries in the same shape — declared local parts every sync preserves;
+# this template ships without them on purpose.
 version: 2
 updates:
   # JS/TS dependencies (pnpm and yarn both use the npm ecosystem here).

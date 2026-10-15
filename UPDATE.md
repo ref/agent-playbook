@@ -139,7 +139,18 @@ difference is drift to sync — EXCEPT these declared local parts, which always 
   Cargo.toml while `dependabot.yml` has no `cargo` entry gets the OFFER — and that is
   one symptom of a larger one, a repo that grew a Cargo.toml AFTER adoption, for which
   the offer is ADOPT.md's whole "Rust" section (the CI job and its twin, the audit job,
-  the scripts, the gate lines), reported under "static-gate gaps" below.
+  the scripts, the gate lines), reported under "static-gate gaps" below. **The same
+  rule covers every other manifest the repo owns**: an entry for an ecosystem the
+  template does not ship (`gomod` for a `go.mod`, `pip` for a `pyproject.toml` or
+  `requirements*.txt`, `bundler` for a `Gemfile`, and so on down Dependabot's list), and
+  a second package root — a `directories:` list in place of the template's `directory: /`
+  on the `npm` entry. The LOCAL part is WHICH ecosystems and WHICH directories; each
+  entry's SHAPE (weekly on Monday, the three cooldown numbers, the `dependencies` label,
+  minor+patch grouped) is the playbook's, and a sync repairs it — the `REVIEW_CMD` rule
+  one file over. The check runs both ways here too: a tracked manifest Dependabot has an
+  ecosystem for, with no entry watching it, gets the OFFER, in the `docker` entry's shape
+  with the ecosystem swapped. (Seen live: a repo's `gomod` entry and its second package
+  root read as undeclared drift on every sync until this paragraph existed.)
 - `settings.json` — everything except the template's own content: the `attribution`
   keys, the three `Bash(.agents/…:*)` allow rules (`auto-review.sh`, `dashboard.sh`,
   `ask.sh` — the two dashboard rules travel with the module and are harmless without
@@ -200,7 +211,11 @@ difference is drift to sync — EXCEPT these declared local parts, which always 
 For each file, report one of: **identical** / **differs** (what moved and why the
 playbook moved it) / **missing in the repo** (OFFER it — a new gate is never installed
 silently; `auto-review.sh` in particular needs ADOPT.md's reviewer detection and a human
-choice) / **present only in the repo** (not yours to delete; report and leave it).
+choice. The offer of `feature-merge.yml` names what the repo does without it: a sub-PR
+merged into a feature branch closes no issue and ticks no umbrella line, so the synced
+`do` skill falls back to closing and ticking by hand after every such merge — the skills
+work either way, by the Class B corollary, but the human should know which way they are
+choosing) / **present only in the repo** (not yours to delete; report and leave it).
 
 **Then report on the STATIC GATE, every sync.** Two parts, both reported before anything
 is written; edits happen only on a yes:

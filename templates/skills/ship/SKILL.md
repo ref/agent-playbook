@@ -15,7 +15,10 @@ Detect the default branch rather than assuming its name:
     DEFAULT=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
 
 Then resolve the BASE this branch's PR targets — the trunk is not a safe default, a
-sub-task shipped there deploys half a feature (AGENTS.md "Feature branches"):
+sub-task shipped there deploys half a feature. The rule: a feature whose phases are
+unusable until the last one lands grows on `feature/<topic>` and reaches the trunk in ONE
+PR, after the human has tried the whole thing (AGENTS.md "Feature branches", where the
+repo has that section; the rule holds either way):
 
 - **The current branch is `feature/<topic>`** → this is a FEATURE SHIP: `BASE=$DEFAULT`,
   and steps 2 and 5 take their feature-ship form below.
@@ -48,8 +51,9 @@ A task branch REBASES onto its base:
 The base moves under open PRs; a stale base can silently reverse a recent merge in the
 squash.
 
-A feature branch (feature ship) MERGES the trunk in — never a rebase, the open sub-PRs
-hang off its commits (AGENTS.md "Feature branches"):
+A feature branch (feature ship) MERGES the trunk in — never a rebase: the open sub-PRs
+hang off its commits, and a rebase rewrites the history every one of them was cut from
+(AGENTS.md "Feature branches", where the repo has it):
 
     git fetch origin --prune
     git merge origin/$DEFAULT
@@ -72,7 +76,9 @@ hit is fixed, not silenced; a genuine false positive goes into the tool's config
 comment saying why.
 
 **One more check when `BASE` is a feature branch:** a schema-surface change never rides
-a feature branch (AGENTS.md "Specs and plans") — it ships to the trunk as its own PR.
+a feature branch — it ships to the trunk as its own PR, additive and backward-compatible,
+so the shared instance never holds a migration the trunk does not know (AGENTS.md
+"Specs and plans" and "Shared mutable state", where the repo has the rule).
 List the files this branch changes (`git diff --name-only origin/$BASE...HEAD`) and read
 them against the repo's declaration of its schema surface (`scripts/schema-lock.config.mts`
 where the schema-lock check is installed; AGENTS.md "Shared mutable state" otherwise).
@@ -127,7 +133,8 @@ Also fill, honestly:
 - **How to test by hand** — the ONLY section the human reads before testing. Concrete
   click-through steps: where to go, what to click, what must happen. For a feature ship:
   the whole feature, end to end, on the feature branch — the human tries it there
-  BEFORE merging (AGENTS.md "Feature branches").
+  BEFORE merging; that try is what the feature branch exists for (AGENTS.md "Feature
+  branches", where the repo has it).
 - **Risk nearby** — what this could regress, and any test change declared explicitly. A
   deleted/skipped/weakened test with no justification here is a reviewer blocker.
 - If the diff touches anything AGENTS.md flags as one-branch-at-a-time (a schema, a
